@@ -11,3 +11,7 @@ Cargo.lock
 
 # macOS
 .DS_Store
+
+# Homebrew bottles (build artifacts)
+*.bottle.tar.gz
+*.bottle.json

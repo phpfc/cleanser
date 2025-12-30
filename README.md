@@ -5,10 +5,9 @@ A blazing-fast CLI tool for clearing macOS storage space, written in Rust.
 ## Quick Start
 
 ```bash
-# Install (choose one method)
-./install.sh                          # Using install script
-cargo install --path .                # Using cargo
-brew install phpfc/cleanser/cleanser  # Using Homebrew (when available)
+# Install
+brew tap phpfc/cleanser
+brew install cleanser
 
 # Scan your system
 cleanser scan --speed normal
@@ -61,18 +60,10 @@ cleanser clean --risk safe
 
 ### Option 1: Homebrew (Recommended)
 
-Once published to a Homebrew tap:
-
 ```bash
-# Install from tap
 brew tap phpfc/cleanser
 brew install cleanser
-
-# Or install directly (when published)
-brew install phpfc/cleanser/cleanser
 ```
-
-The `cleanser` command will be automatically available in your PATH.
 
 ### Option 2: Using the Install Script
 

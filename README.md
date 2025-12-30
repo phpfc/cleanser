@@ -2,6 +2,24 @@
 
 A blazing-fast CLI tool for clearing macOS storage space, written in Rust.
 
+## Quick Start
+
+```bash
+# Install (choose one method)
+./install.sh                          # Using install script
+cargo install --path .                # Using cargo
+brew install phpfc/cleanser/cleanser  # Using Homebrew (when available)
+
+# Scan your system
+cleanser scan --speed normal
+
+# Clean safe items (with preview)
+cleanser clean --dry-run
+
+# Actually clean
+cleanser clean --risk safe
+```
+
 ## Features
 
 - **Smart Caching**: Scan results are cached (`~/.cache/cleanser/last-scan.json`) so `clean` doesn't re-scan unnecessarily
@@ -41,19 +59,81 @@ A blazing-fast CLI tool for clearing macOS storage space, written in Rust.
 
 ## Installation
 
-### From Source
+### Option 1: Homebrew (Recommended)
+
+Once published to a Homebrew tap:
+
+```bash
+# Install from tap
+brew tap phpfc/cleanser
+brew install cleanser
+
+# Or install directly (when published)
+brew install phpfc/cleanser/cleanser
+```
+
+The `cleanser` command will be automatically available in your PATH.
+
+### Option 2: Using the Install Script
+
+```bash
+# Clone and run the install script
+git clone https://github.com/phpfc/cleanser.git
+cd cleanser
+./install.sh
+```
+
+This builds the release binary and copies it to `/usr/local/bin` (may require sudo).
+
+### Option 3: Cargo Install (Rust Users)
+
+```bash
+# Install directly from source
+cargo install --git https://github.com/phpfc/cleanser.git
+
+# Or clone first
+git clone https://github.com/phpfc/cleanser.git
+cd cleanser
+cargo install --path .
+```
+
+This installs to `~/.cargo/bin/cleanser` (make sure `~/.cargo/bin` is in your PATH).
+
+### Option 4: Manual Build
 
 ```bash
 # Clone the repository
-git clone https://github.com/pedrohenrique/cleanser.git
+git clone https://github.com/phpfc/cleanser.git
 cd cleanser
 
-# Build the project
+# Build the release binary
 cargo build --release
 
-# The binary will be in target/release/cleanser
-# Optionally, install it globally
-cargo install --path .
+# The binary will be at target/release/cleanser
+# Copy it to a directory in your PATH:
+sudo cp target/release/cleanser /usr/local/bin/
+```
+
+### Uninstallation
+
+**If installed via Homebrew:**
+```bash
+brew uninstall cleanser
+```
+
+**If installed via install script or manually:**
+```bash
+# Use the uninstall script
+./uninstall.sh
+
+# Or manually remove
+sudo rm /usr/local/bin/cleanser
+rm -rf ~/.cache/cleanser  # Optional: remove cache
+```
+
+**If installed via cargo:**
+```bash
+cargo uninstall cleanser
 ```
 
 ## Usage

@@ -1,0 +1,33 @@
+name: Build Homebrew Bottle
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bottle:
+    runs-on: macos-latest
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Build bottle
+        run: |
+          brew tap phpfc/cleanser
+          brew install --build-bottle cleanser
+          brew bottle --json cleanser
+
+      - name: Upload bottle to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./cleanser--*.bottle.tar.gz
+          asset_name: cleanser-${{ github.event.release.tag_name }}.bottle.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Output bottle info
+        run: |
+          cat cleanser--*.bottle.json
+          echo "Add this to your formula's bottle block"

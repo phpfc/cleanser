@@ -44,7 +44,7 @@ impl fmt::Display for RiskLevel {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanableItem {
     pub path: String,
     pub size: u64,
@@ -91,7 +91,7 @@ impl fmt::Display for CleanCategory {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResults {
     pub items: Vec<CleanableItem>,
     pub total_size: u64,

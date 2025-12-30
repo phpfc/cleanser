@@ -1,6 +1,7 @@
 mod scanner;
 mod cleaner;
 mod types;
+mod cache;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
@@ -42,6 +43,10 @@ enum Commands {
         /// Output results as JSON
         #[arg(long)]
         json: bool,
+
+        /// Don't save scan results to cache
+        #[arg(long)]
+        no_cache: bool,
     },
     /// Clean files based on risk level
     Clean {
@@ -56,6 +61,10 @@ enum Commands {
         /// Dry run - show what would be deleted without deleting
         #[arg(long)]
         dry_run: bool,
+
+        /// Force a fresh scan instead of using cached results
+        #[arg(long)]
+        force_scan: bool,
     },
 }
 
@@ -69,7 +78,8 @@ fn main() -> anyhow::Result<()> {
             min_size,
             max_depth,
             find_duplicates,
-            json
+            json,
+            no_cache,
         } => {
             println!("{}", format!("Scanning with {} speed...", speed).cyan());
 
@@ -87,13 +97,20 @@ fn main() -> anyhow::Result<()> {
 
             let results = scanner::scan(config)?;
 
+            // Save to cache unless --no-cache is specified
+            if !no_cache {
+                if let Err(e) = cache::save_scan_results(&results) {
+                    eprintln!("{}", format!("Warning: Failed to save scan cache: {}", e).yellow());
+                }
+            }
+
             if json {
                 println!("{}", serde_json::to_string_pretty(&results)?);
             } else {
                 scanner::display_results(&results);
             }
         }
-        Commands::Clean { risk, yes, dry_run } => {
+        Commands::Clean { risk, yes, dry_run, force_scan } => {
             if dry_run {
                 println!("{}", "DRY RUN MODE - No files will be deleted".yellow());
             }
@@ -110,7 +127,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            cleaner::clean(risk, dry_run)?;
+            cleaner::clean(risk, dry_run, force_scan)?;
         }
     }
 

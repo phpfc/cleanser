@@ -4,6 +4,7 @@ A blazing-fast CLI tool for clearing macOS storage space, written in Rust.
 
 ## Features
 
+- **Smart Caching**: Scan results are cached (`~/.cache/cleanser/last-scan.json`) so `clean` doesn't re-scan unnecessarily
 - **Dynamic Discovery**: Pattern-based scanning finds cache directories, build artifacts, and logs anywhere in your filesystem
 - **Three scan speeds**: Quick (depth 3), Normal (depth 6), or Thorough (unlimited depth)
 - **Large file detection**: Find files above a configurable size threshold (default 100MB)
@@ -92,7 +93,11 @@ cleanser scan --json
 
 ```bash
 # Clean only safe items (default)
+# Uses cached scan results if available (< 1 hour old)
 cleanser clean
+
+# Force a fresh scan instead of using cache
+cleanser clean --force-scan
 
 # Clean up to moderate risk items
 cleanser clean --risk moderate
@@ -108,6 +113,34 @@ cleanser clean --yes
 
 # Combine options
 cleanser clean --risk moderate --dry-run
+```
+
+### Caching Behavior
+
+Scan results are automatically cached to `~/.cache/cleanser/last-scan.json` for 1 hour. This means:
+
+```bash
+# First, run a scan to see what can be cleaned
+cleanser scan --speed normal
+
+# Later, clean without re-scanning (uses cache)
+cleanser clean --risk safe
+
+# Output: "Using cached scan results from 5 min 23 sec ago"
+```
+
+The cache is invalidated after 1 hour or when you run `cleanser scan` again. Use `--force-scan` to bypass the cache:
+
+```bash
+# Always scan fresh, ignore cache
+cleanser clean --force-scan --risk moderate
+```
+
+To prevent caching during a scan:
+
+```bash
+# Don't save results to cache
+cleanser scan --no-cache
 ```
 
 ## Examples
@@ -243,6 +276,7 @@ MIT
 - [x] Add support for custom scan locations
 - [x] Add more development tool caches (Gradle, Maven, .next, .nuxt, etc.)
 - [x] Dynamic pattern-based discovery of caches and build artifacts
+- [x] Smart caching system to avoid re-scanning on clean operations
 - [ ] Add configurable exclusion patterns (regex-based)
 - [ ] Add scheduled cleanup support (cron integration)
 - [ ] Add interactive TUI mode for reviewing files before deletion

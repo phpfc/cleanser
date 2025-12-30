@@ -1,14 +1,11 @@
-use crate::scanner;
+use crate::{cache, scanner};
 use crate::types::*;
 use anyhow::Result;
 use colored::Colorize;
 use humansize::{format_size, BINARY};
 use std::fs;
 
-pub fn clean(max_risk: RiskLevel, dry_run: bool) -> Result<()> {
-    // First, scan to find what to clean
-    println!("{}", "Scanning for cleanable items...".cyan());
-
+fn run_fresh_scan() -> Result<ScanResults> {
     let config = ScanConfig {
         speed: ScanSpeed::Normal,
         paths: vec![std::env::var("HOME")?],
@@ -18,6 +15,54 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool) -> Result<()> {
     };
 
     let results = scanner::scan(config)?;
+
+    // Save to cache for next time
+    if let Err(e) = cache::save_scan_results(&results) {
+        eprintln!("{}", format!("Warning: Failed to save scan cache: {}", e).yellow());
+    }
+
+    Ok(results)
+}
+
+pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()> {
+    // Try to load from cache first
+    let results = if !force_scan {
+        match cache::load_scan_results(None) {
+            Ok(Some(cached_results)) => {
+                if let Ok(Some(age)) = cache::get_cache_age() {
+                    let mins = age / 60;
+                    let secs = age % 60;
+                    if mins > 0 {
+                        println!(
+                            "{}",
+                            format!("Using cached scan results from {} min {} sec ago", mins, secs).cyan()
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            format!("Using cached scan results from {} seconds ago", secs).cyan()
+                        );
+                    }
+                    println!("{}", "Tip: Use --force-scan to run a fresh scan".dimmed());
+                }
+                cached_results
+            }
+            Ok(None) => {
+                println!("{}", "No cached scan found, running fresh scan...".cyan());
+                run_fresh_scan()?
+            }
+            Err(e) => {
+                println!(
+                    "{}",
+                    format!("Failed to load cache ({}), running fresh scan...", e).yellow()
+                );
+                run_fresh_scan()?
+            }
+        }
+    } else {
+        println!("{}", "Running fresh scan (--force-scan)...".cyan());
+        run_fresh_scan()?
+    };
 
     // Filter items by risk level
     let items_to_clean: Vec<&CleanableItem> = results

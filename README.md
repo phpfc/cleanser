@@ -1,5 +1,8 @@
 # Cleanser
 
+[![CI](https://github.com/phpfc/cleanser/actions/workflows/ci.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/ci.yml)
+[![Release](https://github.com/phpfc/cleanser/actions/workflows/release.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/release.yml)
+
 A blazing-fast CLI tool for clearing macOS storage space, written in Rust.
 
 ## Quick Start

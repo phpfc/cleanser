@@ -511,10 +511,7 @@ pub fn display_results(results: &ScanResults) {
     // Group by risk level
     let mut by_risk: HashMap<RiskLevel, Vec<&CleanableItem>> = HashMap::new();
     for item in &results.items {
-        by_risk
-            .entry(item.risk_level)
-            .or_default()
-            .push(item);
+        by_risk.entry(item.risk_level).or_default().push(item);
     }
 
     // Display by risk level
@@ -538,10 +535,7 @@ pub fn display_results(results: &ScanResults) {
             // Group by category within risk level
             let mut by_category: HashMap<CleanCategory, Vec<&CleanableItem>> = HashMap::new();
             for item in items {
-                by_category
-                    .entry(item.category)
-                    .or_default()
-                    .push(item);
+                by_category.entry(item.category).or_default().push(item);
             }
 
             for (category, cat_items) in by_category {

@@ -62,6 +62,10 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
     pb.finish_with_message("Scan complete!".green().to_string());
 
     let items = Arc::try_unwrap(items).unwrap().into_inner().unwrap();
+
+    // Deduplicate nested paths to avoid double-counting
+    let items = deduplicate_nested_paths(items);
+
     let total_size: u64 = items.iter().map(|item| item.size).sum();
 
     Ok(ScanResults {
@@ -69,6 +73,33 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
         total_size,
         scan_speed: config.speed,
     })
+}
+
+fn deduplicate_nested_paths(items: Vec<CleanableItem>) -> Vec<CleanableItem> {
+    let mut sorted_items = items;
+
+    // Sort by path length (shortest first) so parent directories come before their children
+    sorted_items.sort_by(|a, b| a.path.len().cmp(&b.path.len()));
+
+    let mut deduplicated = Vec::new();
+
+    for item in sorted_items {
+        let path = Path::new(&item.path);
+
+        // Check if this item is a child of any already-kept item
+        let is_child = deduplicated.iter().any(|kept: &CleanableItem| {
+            let kept_path = Path::new(&kept.path);
+            // An item is a child if it starts with a kept path and is not the same path
+            path.starts_with(kept_path) && path != kept_path
+        });
+
+        // Only keep items that are not children of already-kept items
+        if !is_child {
+            deduplicated.push(item);
+        }
+    }
+
+    deduplicated
 }
 
 fn scan_cache_directories(

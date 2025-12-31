@@ -1,11 +1,11 @@
-mod scanner;
-mod cleaner;
-mod types;
 mod cache;
+mod cleaner;
+mod scanner;
+mod types;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use types::{ScanSpeed, RiskLevel};
+use types::{RiskLevel, ScanSpeed};
 
 #[derive(Parser)]
 #[command(name = "cleanser")]
@@ -100,7 +100,10 @@ fn main() -> anyhow::Result<()> {
             // Save to cache unless --no-cache is specified
             if !no_cache {
                 if let Err(e) = cache::save_scan_results(&results) {
-                    eprintln!("{}", format!("Warning: Failed to save scan cache: {}", e).yellow());
+                    eprintln!(
+                        "{}",
+                        format!("Warning: Failed to save scan cache: {}", e).yellow()
+                    );
                 }
             }
 
@@ -110,12 +113,20 @@ fn main() -> anyhow::Result<()> {
                 scanner::display_results(&results);
             }
         }
-        Commands::Clean { risk, yes, dry_run, force_scan } => {
+        Commands::Clean {
+            risk,
+            yes,
+            dry_run,
+            force_scan,
+        } => {
             if dry_run {
                 println!("{}", "DRY RUN MODE - No files will be deleted".yellow());
             }
 
-            println!("{}", format!("Cleaning with maximum risk level: {}", risk).cyan());
+            println!(
+                "{}",
+                format!("Cleaning with maximum risk level: {}", risk).cyan()
+            );
 
             if !yes && !dry_run {
                 println!("{}", "This will delete files. Continue? (y/N)".yellow());

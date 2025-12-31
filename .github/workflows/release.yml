@@ -123,9 +123,15 @@ jobs:
           brew bottle --json cleanser
           BOTTLE_FILE=$(ls cleanser--*.bottle.*.tar.gz 2>/dev/null || ls ./cleanser--*.bottle.*.tar.gz)
           BOTTLE_JSON=$(ls cleanser--*.bottle.json 2>/dev/null || ls ./cleanser--*.bottle.json)
-          echo "bottle_file=${BOTTLE_FILE}" >> $GITHUB_OUTPUT
+
+          # Rename bottle file from double-dash to single-dash (Homebrew naming convention)
+          RENAMED_BOTTLE=$(echo "${BOTTLE_FILE}" | sed 's/cleanser--/cleanser-/')
+          mv "${BOTTLE_FILE}" "${RENAMED_BOTTLE}"
+
+          echo "bottle_file=${RENAMED_BOTTLE}" >> $GITHUB_OUTPUT
           echo "bottle_json=${BOTTLE_JSON}" >> $GITHUB_OUTPUT
-          echo "Bottle file: ${BOTTLE_FILE}"
+          echo "Original bottle file: ${BOTTLE_FILE}"
+          echo "Renamed bottle file: ${RENAMED_BOTTLE}"
           echo "Bottle JSON: ${BOTTLE_JSON}"
 
       - name: Upload bottle to release

@@ -100,30 +100,32 @@ jobs:
         run: |
           git clone https://github.com/phpfc/homebrew-cleanser.git tap-repo
 
-      - name: Update formula with bottle info
+      - name: Download and calculate source tarball SHA256
+        run: |
+          curl -sL "https://github.com/phpfc/cleanser/archive/refs/tags/${{ steps.get_version.outputs.tag }}.tar.gz" -o source.tar.gz
+          echo "SOURCE_SHA=$(shasum -a 256 source.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Update formula with new version and bottle info
         run: |
           cd tap-repo
 
           # Extract bottle SHA256
           BOTTLE_SHA=$(cat ../${{ steps.bottle.outputs.bottle_json }} | jq -r '.[] | .bottle.tags[].sha256')
-          BOTTLE_URL="https://github.com/phpfc/cleanser/releases/download/${{ steps.get_version.outputs.tag }}/${{ steps.bottle.outputs.bottle_file }}"
+          VERSION="${{ steps.get_version.outputs.version }}"
+          TAG="${{ steps.get_version.outputs.tag }}"
 
-          # Update the formula
-          ruby -i -pe "
-            if /bottle do/
-              @in_bottle = true
-            end
-            if @in_bottle && /end/
-              @in_bottle = false
-            end
-            if @in_bottle && /sha256.*:.*=>/
-              sub(/sha256.*:.*=>.*\".*\"/, \"sha256 arm64_sonoma: \\\"$BOTTLE_SHA\\\"\")
-            end
-          " Formula/cleanser.rb
+          # Update source URL and SHA256
+          sed -i '' "s|url \".*\"|url \"https://github.com/phpfc/cleanser/archive/refs/tags/${TAG}.tar.gz\"|" Formula/cleanser.rb
+          sed -i '' "s|sha256 \".*\"|sha256 \"${SOURCE_SHA}\"|" Formula/cleanser.rb
 
-          # Also update the version and URL in the formula
-          sed -i '' 's|url ".*"|url "https://github.com/phpfc/cleanser/archive/refs/tags/${{ steps.get_version.outputs.tag }}.tar.gz"|' Formula/cleanser.rb
-          sed -i '' 's|version ".*"|version "${{ steps.get_version.outputs.version }}"|' Formula/cleanser.rb
+          # Update bottle root_url
+          sed -i '' "s|root_url \".*\"|root_url \"https://github.com/phpfc/cleanser/releases/download/${TAG}\"|" Formula/cleanser.rb
+
+          # Update bottle SHA256
+          sed -i '' "s|sha256 cellar: :any_skip_relocation, arm64_tahoe: \".*\"|sha256 cellar: :any_skip_relocation, arm64_tahoe: \"${BOTTLE_SHA}\"|" Formula/cleanser.rb
+
+          # Update test assertion to match new version
+          sed -i '' "s|assert_match \"cleanser .*\"|assert_match \"cleanser ${VERSION}\"|" Formula/cleanser.rb
 
       - name: Commit and push formula update
         env:

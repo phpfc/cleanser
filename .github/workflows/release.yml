@@ -79,6 +79,39 @@ jobs:
           echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Clone tap repository
+        run: |
+          git clone https://github.com/phpfc/homebrew-cleanser.git tap-repo
+
+      - name: Download and calculate source tarball SHA256
+        run: |
+          curl -sL "https://github.com/phpfc/cleanser/archive/refs/tags/${{ steps.get_version.outputs.tag }}.tar.gz" -o source.tar.gz
+          echo "SOURCE_SHA=$(shasum -a 256 source.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Update formula source version and SHA256
+        run: |
+          cd tap-repo
+          VERSION="${{ steps.get_version.outputs.version }}"
+          TAG="${{ steps.get_version.outputs.tag }}"
+
+          # Update source URL and SHA256
+          sed -i '' "s|url \".*\"|url \"https://github.com/phpfc/cleanser/archive/refs/tags/${TAG}.tar.gz\"|" Formula/cleanser.rb
+          sed -i '' "s|sha256 \".*\"|sha256 \"${SOURCE_SHA}\"|" Formula/cleanser.rb
+
+          # Update test assertion to match new version
+          sed -i '' "s|assert_match \"cleanser .*\"|assert_match \"cleanser ${VERSION}\"|" Formula/cleanser.rb
+
+      - name: Commit and push formula source update
+        env:
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          cd tap-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/cleanser.rb
+          git commit -m "Update cleanser source to v${{ steps.get_version.outputs.version }}"
+          git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/phpfc/homebrew-cleanser.git main
+
       - name: Tap and install formula
         run: |
           brew tap phpfc/cleanser
@@ -96,27 +129,18 @@ jobs:
         with:
           files: ${{ steps.bottle.outputs.bottle_file }}
 
-      - name: Clone tap repository
+      - name: Pull latest formula changes
         run: |
-          git clone https://github.com/phpfc/homebrew-cleanser.git tap-repo
+          cd tap-repo
+          git pull
 
-      - name: Download and calculate source tarball SHA256
-        run: |
-          curl -sL "https://github.com/phpfc/cleanser/archive/refs/tags/${{ steps.get_version.outputs.tag }}.tar.gz" -o source.tar.gz
-          echo "SOURCE_SHA=$(shasum -a 256 source.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
-
-      - name: Update formula with new version and bottle info
+      - name: Update formula with bottle info
         run: |
           cd tap-repo
 
           # Extract bottle SHA256
           BOTTLE_SHA=$(cat ../${{ steps.bottle.outputs.bottle_json }} | jq -r '.[] | .bottle.tags[].sha256')
-          VERSION="${{ steps.get_version.outputs.version }}"
           TAG="${{ steps.get_version.outputs.tag }}"
-
-          # Update source URL and SHA256
-          sed -i '' "s|url \".*\"|url \"https://github.com/phpfc/cleanser/archive/refs/tags/${TAG}.tar.gz\"|" Formula/cleanser.rb
-          sed -i '' "s|sha256 \".*\"|sha256 \"${SOURCE_SHA}\"|" Formula/cleanser.rb
 
           # Update bottle root_url
           sed -i '' "s|root_url \".*\"|root_url \"https://github.com/phpfc/cleanser/releases/download/${TAG}\"|" Formula/cleanser.rb
@@ -124,10 +148,7 @@ jobs:
           # Update bottle SHA256
           sed -i '' "s|sha256 cellar: :any_skip_relocation, arm64_tahoe: \".*\"|sha256 cellar: :any_skip_relocation, arm64_tahoe: \"${BOTTLE_SHA}\"|" Formula/cleanser.rb
 
-          # Update test assertion to match new version
-          sed -i '' "s|assert_match \"cleanser .*\"|assert_match \"cleanser ${VERSION}\"|" Formula/cleanser.rb
-
-      - name: Commit and push formula update
+      - name: Commit and push formula bottle update
         env:
           GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |

@@ -121,8 +121,12 @@ jobs:
         id: bottle
         run: |
           brew bottle --json cleanser
-          echo "bottle_file=$(ls cleanser--*.bottle.tar.gz)" >> $GITHUB_OUTPUT
-          echo "bottle_json=$(ls cleanser--*.bottle.json)" >> $GITHUB_OUTPUT
+          BOTTLE_FILE=$(ls cleanser--*.bottle.*.tar.gz 2>/dev/null || ls ./cleanser--*.bottle.*.tar.gz)
+          BOTTLE_JSON=$(ls cleanser--*.bottle.json 2>/dev/null || ls ./cleanser--*.bottle.json)
+          echo "bottle_file=${BOTTLE_FILE}" >> $GITHUB_OUTPUT
+          echo "bottle_json=${BOTTLE_JSON}" >> $GITHUB_OUTPUT
+          echo "Bottle file: ${BOTTLE_FILE}"
+          echo "Bottle JSON: ${BOTTLE_JSON}"
 
       - name: Upload bottle to release
         uses: softprops/action-gh-release@v1
@@ -138,15 +142,24 @@ jobs:
         run: |
           cd tap-repo
 
-          # Extract bottle SHA256
-          BOTTLE_SHA=$(cat ../${{ steps.bottle.outputs.bottle_json }} | jq -r '.[] | .bottle.tags[].sha256')
+          # Extract bottle info from JSON
+          BOTTLE_SHA=$(cat ../${{ steps.bottle.outputs.bottle_json }} | jq -r '.[] | .bottle.tags | to_entries[0].value.sha256')
+          BOTTLE_TAG=$(cat ../${{ steps.bottle.outputs.bottle_json }} | jq -r '.[] | .bottle.tags | to_entries[0].key')
+          BOTTLE_REBUILD=$(cat ../${{ steps.bottle.outputs.bottle_json }} | jq -r '.[] | .bottle.rebuild')
           TAG="${{ steps.get_version.outputs.tag }}"
+
+          echo "Bottle SHA: ${BOTTLE_SHA}"
+          echo "Bottle OS tag: ${BOTTLE_TAG}"
+          echo "Bottle rebuild: ${BOTTLE_REBUILD}"
 
           # Update bottle root_url
           sed -i '' "s|root_url \".*\"|root_url \"https://github.com/phpfc/cleanser/releases/download/${TAG}\"|" Formula/cleanser.rb
 
-          # Update bottle SHA256
-          sed -i '' "s|sha256 cellar: :any_skip_relocation, arm64_tahoe: \".*\"|sha256 cellar: :any_skip_relocation, arm64_tahoe: \"${BOTTLE_SHA}\"|" Formula/cleanser.rb
+          # Update bottle rebuild number
+          sed -i '' "s|rebuild .*|rebuild ${BOTTLE_REBUILD}|" Formula/cleanser.rb
+
+          # Update bottle SHA256 with correct OS tag
+          sed -i '' "s|sha256 cellar: :any_skip_relocation, .*: \".*\"|sha256 cellar: :any_skip_relocation, ${BOTTLE_TAG}: \"${BOTTLE_SHA}\"|" Formula/cleanser.rb
 
       - name: Commit and push formula bottle update
         env:

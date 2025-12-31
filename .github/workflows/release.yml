@@ -98,8 +98,8 @@ jobs:
           sed -i '' "s|url \".*\"|url \"https://github.com/phpfc/cleanser/archive/refs/tags/${TAG}.tar.gz\"|" Formula/cleanser.rb
           sed -i '' "s|sha256 \".*\"|sha256 \"${SOURCE_SHA}\"|" Formula/cleanser.rb
 
-          # Update test assertion to match new version
-          sed -i '' "s|assert_match \"cleanser .*\"|assert_match \"cleanser ${VERSION}\"|" Formula/cleanser.rb
+          # Update test assertion to match new version (non-greedy match)
+          sed -i '' "s|assert_match \"cleanser [^\"]*\"|assert_match \"cleanser ${VERSION}\"|" Formula/cleanser.rb
 
       - name: Commit and push formula source update
         env:

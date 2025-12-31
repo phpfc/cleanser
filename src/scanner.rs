@@ -19,7 +19,7 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
     println!("{}", "Starting dynamic filesystem scan...".cyan());
 
     // Determine max depth based on speed
-    let max_depth = config.max_depth.unwrap_or_else(|| match config.speed {
+    let max_depth = config.max_depth.unwrap_or(match config.speed {
         ScanSpeed::Quick => 3,
         ScanSpeed::Normal => 6,
         ScanSpeed::Thorough => usize::MAX,
@@ -107,7 +107,7 @@ fn scan_cache_directories(
     max_depth: usize,
     items: &Arc<Mutex<Vec<CleanableItem>>>,
 ) -> Result<()> {
-    let cache_patterns = vec![
+    let cache_patterns = [
         r"(?i)cache$",
         r"(?i)\.cache$",
         r"(?i)caches$",
@@ -155,7 +155,10 @@ fn scan_cache_directories(
                                 size,
                                 category,
                                 risk_level: risk,
-                                description: format!("Cache directory: {}", path.file_name().unwrap_or_default().to_string_lossy()),
+                                description: format!(
+                                    "Cache directory: {}",
+                                    path.file_name().unwrap_or_default().to_string_lossy()
+                                ),
                             });
                         }
                     }
@@ -174,14 +177,30 @@ fn scan_build_artifacts(
     items: &Arc<Mutex<Vec<CleanableItem>>>,
 ) -> Result<()> {
     let artifact_patterns = vec![
-        ("node_modules", CleanCategory::NodeModules, RiskLevel::Moderate),
+        (
+            "node_modules",
+            CleanCategory::NodeModules,
+            RiskLevel::Moderate,
+        ),
         ("target", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
         ("build", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
         ("dist", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        (".gradle", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        (
+            ".gradle",
+            CleanCategory::BuildArtifacts,
+            RiskLevel::Moderate,
+        ),
         (".maven", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        ("__pycache__", CleanCategory::BuildArtifacts, RiskLevel::Safe),
-        (".pytest_cache", CleanCategory::BuildArtifacts, RiskLevel::Safe),
+        (
+            "__pycache__",
+            CleanCategory::BuildArtifacts,
+            RiskLevel::Safe,
+        ),
+        (
+            ".pytest_cache",
+            CleanCategory::BuildArtifacts,
+            RiskLevel::Safe,
+        ),
         (".next", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
         (".nuxt", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
         ("out", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
@@ -293,7 +312,10 @@ fn scan_log_files(
                                     CleanCategory::AppLogs
                                 },
                                 risk_level: RiskLevel::Safe,
-                                description: format!("Large log file ({})", format_size(size, BINARY)),
+                                description: format!(
+                                    "Large log file ({})",
+                                    format_size(size, BINARY)
+                                ),
                             });
                         }
                     }
@@ -313,7 +335,7 @@ fn scan_large_files(
 ) -> Result<()> {
     let min_size = min_size_mb * 1024 * 1024;
 
-    let skip_dirs = vec![
+    let skip_dirs = [
         "Library/Application Support",
         "Library/Mobile Documents",
         "Applications",
@@ -368,7 +390,8 @@ fn find_duplicates(
     max_depth: usize,
     items: &Arc<Mutex<Vec<CleanableItem>>>,
 ) -> Result<()> {
-    let file_map: Arc<Mutex<HashMap<FileHash, Vec<PathBuf>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let file_map: Arc<Mutex<HashMap<FileHash, Vec<PathBuf>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
     let mut files_to_hash = Vec::new();
 
@@ -390,22 +413,17 @@ fn find_duplicates(
         }
     }
 
-    files_to_hash
-        .par_iter()
-        .for_each(|(path, size)| {
-            if let Ok(hash) = hash_file(path) {
-                let file_hash = FileHash {
-                    hash,
-                    size: *size,
-                };
-                file_map
-                    .lock()
-                    .unwrap()
-                    .entry(file_hash)
-                    .or_insert_with(Vec::new)
-                    .push(path.clone());
-            }
-        });
+    files_to_hash.par_iter().for_each(|(path, size)| {
+        if let Ok(hash) = hash_file(path) {
+            let file_hash = FileHash { hash, size: *size };
+            file_map
+                .lock()
+                .unwrap()
+                .entry(file_hash)
+                .or_default()
+                .push(path.clone());
+        }
+    });
 
     let file_map = file_map.lock().unwrap();
     for (file_hash, paths_list) in file_map.iter() {
@@ -495,7 +513,7 @@ pub fn display_results(results: &ScanResults) {
     for item in &results.items {
         by_risk
             .entry(item.risk_level)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(item);
     }
 
@@ -522,7 +540,7 @@ pub fn display_results(results: &ScanResults) {
             for item in items {
                 by_category
                     .entry(item.category)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(item);
             }
 
@@ -555,6 +573,6 @@ pub fn display_results(results: &ScanResults) {
 
     println!(
         "\n{}",
-        format!("Run 'cleanser clean --risk <level>' to clean files").cyan()
+        "Run 'cleanser clean --risk <level>' to clean files".cyan()
     );
 }

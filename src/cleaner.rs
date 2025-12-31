@@ -1,5 +1,5 @@
-use crate::{cache, scanner};
 use crate::types::*;
+use crate::{cache, scanner};
 use anyhow::Result;
 use colored::Colorize;
 use humansize::{format_size, BINARY};
@@ -18,7 +18,10 @@ fn run_fresh_scan() -> Result<ScanResults> {
 
     // Save to cache for next time
     if let Err(e) = cache::save_scan_results(&results) {
-        eprintln!("{}", format!("Warning: Failed to save scan cache: {}", e).yellow());
+        eprintln!(
+            "{}",
+            format!("Warning: Failed to save scan cache: {}", e).yellow()
+        );
     }
 
     Ok(results)
@@ -35,7 +38,11 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
                     if mins > 0 {
                         println!(
                             "{}",
-                            format!("Using cached scan results from {} min {} sec ago", mins, secs).cyan()
+                            format!(
+                                "Using cached scan results from {} min {} sec ago",
+                                mins, secs
+                            )
+                            .cyan()
                         );
                     } else {
                         println!(
@@ -79,7 +86,10 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
     let total_size: u64 = items_to_clean.iter().map(|item| item.size).sum();
 
     println!("\n{}", "=== Items to Clean ===".green().bold());
-    println!("Total space to free: {}\n", format_size(total_size, BINARY).bold());
+    println!(
+        "Total space to free: {}\n",
+        format_size(total_size, BINARY).bold()
+    );
 
     for item in &items_to_clean {
         let risk_indicator = match item.risk_level {
@@ -124,9 +134,15 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
     }
 
     println!("\n{}", "=== Cleanup Summary ===".green().bold());
-    println!("Cleaned: {} items", cleaned_count.to_string().green().bold());
+    println!(
+        "Cleaned: {} items",
+        cleaned_count.to_string().green().bold()
+    );
     println!("Failed: {} items", failed_count.to_string().red().bold());
-    println!("Space freed: {}", format_size(cleaned_size, BINARY).green().bold());
+    println!(
+        "Space freed: {}",
+        format_size(cleaned_size, BINARY).green().bold()
+    );
 
     Ok(())
 }

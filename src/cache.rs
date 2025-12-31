@@ -29,9 +29,7 @@ pub fn save_scan_results(results: &ScanResults) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_secs();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let cached = CachedScan {
         timestamp,
@@ -56,13 +54,11 @@ pub fn load_scan_results(max_age_secs: Option<u64>) -> Result<Option<ScanResults
     let contents = fs::read_to_string(&cache_path)
         .with_context(|| format!("Failed to read cache from {:?}", cache_path))?;
 
-    let cached: CachedScan = serde_json::from_str(&contents)
-        .with_context(|| "Failed to parse cached scan results")?;
+    let cached: CachedScan =
+        serde_json::from_str(&contents).with_context(|| "Failed to parse cached scan results")?;
 
     let max_age = max_age_secs.unwrap_or(CACHE_MAX_AGE_SECS);
-    let current_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_secs();
+    let current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let age = current_time.saturating_sub(cached.timestamp);
 
@@ -98,9 +94,7 @@ pub fn get_cache_age() -> Result<Option<u64>> {
     let contents = fs::read_to_string(&cache_path)?;
     let cached: CachedScan = serde_json::from_str(&contents)?;
 
-    let current_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_secs();
+    let current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let age = current_time.saturating_sub(cached.timestamp);
     Ok(Some(age))

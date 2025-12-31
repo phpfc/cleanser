@@ -5,49 +5,15 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: Get version from tag
-        id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Installation
-
-            ### Homebrew (macOS)
-            ```bash
-            brew tap phpfc/cleanser
-            brew install cleanser
-            ```
-
-            ### Manual Installation
-            Download the appropriate binary for your system below and add it to your PATH.
-
-            ## Changes
-            See [CHANGELOG.md](https://github.com/phpfc/cleanser/blob/main/CHANGELOG.md) for details.
-
   build-release:
     name: Build Release
-    needs: create-release
     runs-on: macos-latest
     strategy:
       matrix:
@@ -56,6 +22,10 @@ jobs:
           - aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -71,37 +41,26 @@ jobs:
       - name: Create archive
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz cleanser
-          shasum -a 256 cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz > cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
+          tar czf cleanser-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz cleanser
+          shasum -a 256 cleanser-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz > cleanser-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload binaries to release
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz
-          asset_name: cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz
-          asset_content_type: application/gzip
+          files: |
+            target/${{ matrix.target }}/release/cleanser-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz
+            target/${{ matrix.target }}/release/cleanser-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
+          body: |
+            ## Installation
 
-      - name: Upload SHA256
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
-          asset_name: cleanser-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
-          asset_content_type: text/plain
+            ### Homebrew (macOS)
+            ```bash
+            brew tap phpfc/cleanser
+            brew install cleanser
+            ```
 
-  trigger-homebrew:
-    name: Trigger Homebrew Update
-    needs: [create-release, build-release]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Repository Dispatch
-        uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: release-published
-          client-payload: '{"version": "${{ needs.create-release.outputs.version }}"}'
+            ### Manual Installation
+            Download the appropriate binary for your system below and add it to your PATH.
+
+            ## Changes
+            See [CHANGELOG.md](https://github.com/phpfc/cleanser/blob/main/CHANGELOG.md) for details.

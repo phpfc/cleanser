@@ -5,6 +5,7 @@ mod types;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use std::path::PathBuf;
 use types::{RiskLevel, ScanSpeed};
 
 #[derive(Parser)]
@@ -86,9 +87,9 @@ fn main() -> anyhow::Result<()> {
             let config = types::ScanConfig {
                 speed,
                 paths: if paths.is_empty() {
-                    vec![std::env::var("HOME")?]
+                    vec![PathBuf::from(std::env::var("HOME")?)]
                 } else {
-                    paths
+                    paths.into_iter().map(PathBuf::from).collect()
                 },
                 min_file_size_mb: min_size,
                 max_depth,

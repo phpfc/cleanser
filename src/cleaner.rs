@@ -3,12 +3,14 @@ use crate::{cache, scanner};
 use anyhow::Result;
 use colored::Colorize;
 use humansize::{format_size, BINARY};
+use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 fn run_fresh_scan() -> Result<ScanResults> {
     let config = ScanConfig {
         speed: ScanSpeed::Normal,
-        paths: vec![std::env::var("HOME")?],
+        paths: vec![PathBuf::from(std::env::var("HOME")?)],
         min_file_size_mb: 0, // Don't scan for large files during clean
         max_depth: Some(6),
         find_duplicates: false, // Don't look for duplicates during clean
@@ -83,31 +85,8 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
         return Ok(());
     }
 
-    let total_size: u64 = items_to_clean.iter().map(|item| item.size).sum();
-
-    println!("\n{}", "=== Items to Clean ===".green().bold());
-    println!(
-        "Total space to free: {}\n",
-        format_size(total_size, BINARY).bold()
-    );
-
-    for item in &items_to_clean {
-        let risk_indicator = match item.risk_level {
-            RiskLevel::Safe => "✓".green(),
-            RiskLevel::Moderate => "⚠".yellow(),
-            RiskLevel::Risky => "⚠".red(),
-        };
-
-        println!(
-            "{} {} - {} - {}",
-            risk_indicator,
-            item.category,
-            format_size(item.size, BINARY),
-            item.path.dimmed()
-        );
-    }
-
-    println!();
+    // Show preview
+    preview_items(&items_to_clean);
 
     if dry_run {
         println!("{}", "DRY RUN: No files were deleted.".yellow().bold());
@@ -124,11 +103,11 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
             Ok(size) => {
                 cleaned_size += size;
                 cleaned_count += 1;
-                println!("{} Cleaned: {}", "✓".green(), item.path.dimmed());
+                println!("{} Cleaned: {}", "✓".green(), item.path.display().to_string().dimmed());
             }
             Err(e) => {
                 failed_count += 1;
-                println!("{} Failed to clean {}: {}", "✗".red(), item.path, e);
+                println!("{} Failed to clean {}: {}", "✗".red(), item.path.display(), e);
             }
         }
     }
@@ -147,8 +126,7 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
     Ok(())
 }
 
-fn delete_item(path: &str) -> Result<u64> {
-    let path = std::path::Path::new(path);
+fn delete_item(path: &Path) -> Result<u64> {
 
     if !path.exists() {
         return Ok(0);
@@ -171,7 +149,7 @@ fn delete_item(path: &str) -> Result<u64> {
     Ok(size)
 }
 
-fn get_dir_size_fast(path: &std::path::Path) -> Result<u64> {
+fn get_dir_size_fast(path: &Path) -> Result<u64> {
     let mut total = 0;
 
     for entry in walkdir::WalkDir::new(path)
@@ -187,4 +165,70 @@ fn get_dir_size_fast(path: &std::path::Path) -> Result<u64> {
     }
 
     Ok(total)
+}
+
+/// Preview items that will be cleaned with a summary by category
+fn preview_items(items: &[&CleanableItem]) {
+    let total_size: u64 = items.iter().map(|item| item.size).sum();
+
+    println!("\n{}", "=== Preview: Items to Clean ===".green().bold());
+    println!(
+        "Total space to free: {}\n",
+        format_size(total_size, BINARY).bold()
+    );
+
+    // Group by category
+    let mut by_category: HashMap<CleanCategory, Vec<&CleanableItem>> = HashMap::new();
+    for item in items {
+        by_category.entry(item.category).or_default().push(*item);
+    }
+
+    // Display by category
+    let categories = [
+        CleanCategory::SystemCache,
+        CleanCategory::BrowserCache,
+        CleanCategory::AppCache,
+        CleanCategory::BrewCache,
+        CleanCategory::PipCache,
+        CleanCategory::CargoCache,
+        CleanCategory::SystemLogs,
+        CleanCategory::AppLogs,
+        CleanCategory::NodeModules,
+        CleanCategory::BuildArtifacts,
+        CleanCategory::LargeFiles,
+        CleanCategory::DuplicateFiles,
+        CleanCategory::TempFiles,
+    ];
+
+    for category in categories {
+        if let Some(cat_items) = by_category.get(&category) {
+            let cat_total: u64 = cat_items.iter().map(|i| i.size).sum();
+            let risk_indicator = match cat_items[0].risk_level {
+                RiskLevel::Safe => "✓".green(),
+                RiskLevel::Moderate => "⚠".yellow(),
+                RiskLevel::Risky => "⚠".red(),
+            };
+
+            println!(
+                "{} {} - {} ({} items)",
+                risk_indicator,
+                category,
+                format_size(cat_total, BINARY).bold(),
+                cat_items.len()
+            );
+
+            // Show up to 5 items per category
+            for item in cat_items.iter().take(5) {
+                println!(
+                    "    {} - {}",
+                    format_size(item.size, BINARY),
+                    item.path.display().to_string().dimmed()
+                );
+            }
+            if cat_items.len() > 5 {
+                println!("    ... and {} more", cat_items.len() - 5);
+            }
+            println!();
+        }
+    }
 }

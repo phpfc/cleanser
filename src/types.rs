@@ -1,6 +1,7 @@
 use clap::ValueEnum;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -48,11 +49,27 @@ impl fmt::Display for RiskLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanableItem {
-    pub path: String,
+    #[serde(serialize_with = "serialize_pathbuf", deserialize_with = "deserialize_pathbuf")]
+    pub path: PathBuf,
     pub size: u64,
     pub category: CleanCategory,
     pub risk_level: RiskLevel,
     pub description: String,
+}
+
+fn serialize_pathbuf<S>(path: &Path, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&path.to_string_lossy())
+}
+
+fn deserialize_pathbuf<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(PathBuf::from(s))
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -103,7 +120,7 @@ pub struct ScanResults {
 #[derive(Debug, Clone)]
 pub struct ScanConfig {
     pub speed: ScanSpeed,
-    pub paths: Vec<String>,
+    pub paths: Vec<PathBuf>,
     pub min_file_size_mb: u64,
     pub max_depth: Option<usize>,
     pub find_duplicates: bool,
@@ -113,4 +130,75 @@ pub struct ScanConfig {
 pub struct FileHash {
     pub hash: String,
     pub size: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_risk_level_ordering() {
+        assert!(RiskLevel::Safe < RiskLevel::Moderate);
+        assert!(RiskLevel::Moderate < RiskLevel::Risky);
+        assert!(RiskLevel::Safe < RiskLevel::Risky);
+    }
+
+    #[test]
+    fn test_scan_speed_display() {
+        assert_eq!(format!("{}", ScanSpeed::Quick), "quick");
+        assert_eq!(format!("{}", ScanSpeed::Normal), "normal");
+        assert_eq!(format!("{}", ScanSpeed::Thorough), "thorough");
+    }
+
+    #[test]
+    fn test_risk_level_display() {
+        assert_eq!(format!("{}", RiskLevel::Safe), "safe");
+        assert_eq!(format!("{}", RiskLevel::Moderate), "moderate");
+        assert_eq!(format!("{}", RiskLevel::Risky), "risky");
+    }
+
+    #[test]
+    fn test_clean_category_display() {
+        assert_eq!(format!("{}", CleanCategory::SystemCache), "System Cache");
+        assert_eq!(format!("{}", CleanCategory::NodeModules), "Node Modules");
+        assert_eq!(format!("{}", CleanCategory::LargeFiles), "Large Files");
+    }
+
+    #[test]
+    fn test_pathbuf_serialization() {
+        let item = CleanableItem {
+            path: PathBuf::from("/test/path"),
+            size: 1024,
+            category: CleanCategory::SystemCache,
+            risk_level: RiskLevel::Safe,
+            description: "Test item".to_string(),
+        };
+
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("/test/path"));
+        assert!(json.contains("1024"));
+
+        let deserialized: CleanableItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.path, PathBuf::from("/test/path"));
+        assert_eq!(deserialized.size, 1024);
+    }
+
+    #[test]
+    fn test_file_hash_equality() {
+        let hash1 = FileHash {
+            hash: "abc123".to_string(),
+            size: 1024,
+        };
+        let hash2 = FileHash {
+            hash: "abc123".to_string(),
+            size: 1024,
+        };
+        let hash3 = FileHash {
+            hash: "def456".to_string(),
+            size: 1024,
+        };
+
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, hash3);
+    }
 }

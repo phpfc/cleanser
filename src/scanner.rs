@@ -174,6 +174,40 @@ fn get_artifact_patterns() -> Vec<(&'static str, CleanCategory, RiskLevel)> {
 fn check_cache_directory(path: &Path, regexes: &[Regex]) -> Option<CleanableItem> {
     let path_str = path.to_string_lossy();
 
+    // Special handling for Library/Caches - scan inside for individual app caches
+    // instead of trying to delete the protected parent directory
+    if path_str.ends_with("Library/Caches") {
+        // Don't return the parent Library/Caches directory itself
+        // WalkDir will continue scanning inside and we'll catch individual app caches
+        return None;
+    }
+
+    // Check if this is an individual app cache inside Library/Caches
+    if let Some(parent) = path.parent() {
+        let parent_str = parent.to_string_lossy();
+        if parent_str.ends_with("Library/Caches") {
+            // This is a direct child of Library/Caches (e.g., com.google.Chrome)
+            if let Ok(size) = get_dir_size(path) {
+                if size > 1024 * 1024 { // > 1MB
+                    return Some(CleanableItem {
+                        path: path.to_path_buf(),
+                        size,
+                        category: CleanCategory::SystemCache,
+                        risk_level: RiskLevel::Safe,
+                        description: format!(
+                            "App cache: {}",
+                            path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "unknown".to_string())
+                        ),
+                    });
+                }
+            }
+            return None;
+        }
+    }
+
+    // For all other cache directories, use the existing logic
     for regex in regexes {
         if regex.is_match(&path_str) {
             if let Ok(size) = get_dir_size(path) {
@@ -414,19 +448,16 @@ fn hash_file(path: &Path) -> Result<String> {
 }
 
 fn get_dir_size(path: &Path) -> Result<u64> {
-    let mut total = 0;
-
-    for entry in WalkDir::new(path)
+    // Parallel directory size calculation using Rayon's par_bridge()
+    let total: u64 = WalkDir::new(path)
         .follow_links(false)
         .into_iter()
+        .par_bridge()  // Parallelize the iteration
         .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total += metadata.len();
-            }
-        }
-    }
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum();
 
     Ok(total)
 }

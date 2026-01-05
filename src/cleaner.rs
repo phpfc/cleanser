@@ -3,6 +3,7 @@ use crate::{cache, scanner};
 use anyhow::Result;
 use colored::Colorize;
 use humansize::{format_size, BINARY};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -93,24 +94,43 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
         return Ok(());
     }
 
-    // Perform the cleanup
+    // Perform the cleanup with progress bar
     let mut cleaned_size = 0u64;
     let mut cleaned_count = 0usize;
     let mut failed_count = 0usize;
 
+    let pb = ProgressBar::new(items_to_clean.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
+            .expect("Failed to create progress bar template")
+            .progress_chars("#>-"),
+    );
+
     for item in items_to_clean {
+        // Show current file being cleaned
+        let file_name = item.path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        pb.set_message(format!("Cleaning: {}", file_name));
+
         match delete_item(&item.path) {
             Ok(size) => {
                 cleaned_size += size;
                 cleaned_count += 1;
-                println!("{} Cleaned: {}", "✓".green(), item.path.display().to_string().dimmed());
+                pb.println(format!("{} Cleaned: {}", "✓".green(), item.path.display().to_string().dimmed()));
             }
             Err(e) => {
                 failed_count += 1;
-                println!("{} Failed to clean {}: {}", "✗".red(), item.path.display(), e);
+                pb.println(format!("{} Failed to clean {}: {}", "✗".red(), item.path.display(), e));
             }
         }
+        pb.inc(1);
     }
+
+    pb.finish_with_message(format!("Cleanup complete! {} items cleaned, {} failed",
+        cleaned_count.to_string().green(),
+        failed_count.to_string().red()));
 
     println!("\n{}", "=== Cleanup Summary ===".green().bold());
     println!(
@@ -150,19 +170,18 @@ fn delete_item(path: &Path) -> Result<u64> {
 }
 
 fn get_dir_size_fast(path: &Path) -> Result<u64> {
-    let mut total = 0;
+    use rayon::prelude::*;
 
-    for entry in walkdir::WalkDir::new(path)
+    // Parallel directory size calculation using Rayon's par_bridge()
+    let total: u64 = walkdir::WalkDir::new(path)
         .follow_links(false)
         .into_iter()
+        .par_bridge()  // Parallelize the iteration
         .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total += metadata.len();
-            }
-        }
-    }
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum();
 
     Ok(total)
 }

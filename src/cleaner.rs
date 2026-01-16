@@ -15,6 +15,10 @@ fn run_fresh_scan() -> Result<ScanResults> {
         min_file_size_mb: 0, // Don't scan for large files during clean
         max_depth: Some(6),
         find_duplicates: false, // Don't look for duplicates during clean
+        ignore_patterns: IgnoreList::new(),
+        size_range: None,
+        age_criteria: None,
+        interactive_mode: false,
     };
 
     let results = scanner::scan(config)?;

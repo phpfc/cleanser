@@ -43,7 +43,32 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
     pb.finish_with_message("Scan complete!".green().to_string());
 
     // Deduplicate nested paths to avoid double-counting
-    let items = deduplicate_nested_paths(items);
+    let mut items = deduplicate_nested_paths(items);
+
+    // Apply size range filter if specified
+    let mut filtered_by_size_count = 0;
+    if let Some(ref size_range) = config.size_range {
+        let original_count = items.len();
+        items.retain(|item| size_range.contains(item.size));
+        filtered_by_size_count = original_count - items.len();
+    }
+
+    // Apply age filter if specified
+    let mut filtered_by_age_count = 0;
+    if let Some(ref age_criteria) = config.age_criteria {
+        let original_count = items.len();
+        items.retain(|item| {
+            // Try to get modification time for the file
+            if let Ok(metadata) = fs::metadata(&item.path) {
+                if let Ok(modified) = metadata.modified() {
+                    return age_criteria.matches(modified);
+                }
+            }
+            // If we can't get modification time, skip the file
+            false
+        });
+        filtered_by_age_count = original_count - items.len();
+    }
 
     let total_size: u64 = items.iter().map(|item| item.size).sum();
 
@@ -51,6 +76,9 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
         items,
         total_size,
         scan_speed: config.speed,
+        excluded_dirs_count: 0,
+        filtered_by_size_count,
+        filtered_by_age_count,
     })
 }
 
@@ -89,6 +117,11 @@ fn scan_filesystem(config: &ScanConfig, max_depth: usize) -> Result<Vec<Cleanabl
                 .filter_map(|entry| {
                     let path = entry.path();
                     let path_str = path.to_string_lossy();
+
+                    // Check ignore patterns first
+                    if config.ignore_patterns.should_ignore(path) {
+                        return None;
+                    }
 
                     // Skip our own target directory
                     if path_str.contains("/cleanser/target") {

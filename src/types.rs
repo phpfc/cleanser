@@ -349,13 +349,39 @@ impl WhitelistConfig {
 
     pub fn load() -> anyhow::Result<Self> {
         let config_path = Self::get_config_path()?;
-        
+
         if !config_path.exists() {
             return Ok(Self::new());
         }
 
         let content = std::fs::read_to_string(&config_path)?;
-        let config: WhitelistConfig = serde_json::from_str(&content)?;
+        let mut config: WhitelistConfig = serde_json::from_str(&content)?;
+
+        // Migrate relative paths to absolute paths
+        let home = std::env::var("HOME")?;
+        let home_path = PathBuf::from(&home);
+
+        let mut normalized_whitelist = HashSet::new();
+        let mut needs_save = false;
+
+        for path in config.whitelist.iter() {
+            if path.is_relative() {
+                // Convert relative path to absolute by joining with home directory
+                let absolute_path = home_path.join(path);
+                normalized_whitelist.insert(absolute_path);
+                needs_save = true;
+            } else {
+                normalized_whitelist.insert(path.clone());
+            }
+        }
+
+        config.whitelist = normalized_whitelist;
+
+        // Save the normalized config if any paths were converted
+        if needs_save {
+            config.save()?;
+        }
+
         Ok(config)
     }
 
@@ -373,13 +399,46 @@ impl WhitelistConfig {
     }
 
     pub fn add_path(&mut self, path: PathBuf) -> anyhow::Result<()> {
-        self.whitelist.insert(path);
+        // Convert to absolute path if relative
+        let absolute_path = if path.is_absolute() {
+            path
+        } else {
+            std::env::current_dir()?.join(&path)
+        };
+
+        // Canonicalize to resolve symlinks and normalize the path
+        let canonical_path = match absolute_path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => {
+                // If canonicalize fails (e.g., path doesn't exist), use the absolute path as-is
+                absolute_path
+            }
+        };
+
+        self.whitelist.insert(canonical_path);
         self.save()?;
         Ok(())
     }
 
     pub fn remove_path(&mut self, path: &Path) -> anyhow::Result<bool> {
-        let removed = self.whitelist.remove(path);
+        // Try to remove by exact match first
+        let mut removed = self.whitelist.remove(path);
+
+        // If not found and path is relative, try converting to absolute
+        if !removed && path.is_relative() {
+            let absolute_path = std::env::current_dir()?.join(path);
+            if let Ok(canonical_path) = absolute_path.canonicalize() {
+                removed = self.whitelist.remove(&canonical_path);
+            }
+            // Also try with home directory
+            if !removed {
+                if let Ok(home) = std::env::var("HOME") {
+                    let home_path = PathBuf::from(home).join(path);
+                    removed = self.whitelist.remove(&home_path);
+                }
+            }
+        }
+
         if removed {
             self.save()?;
         }

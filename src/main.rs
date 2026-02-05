@@ -6,6 +6,7 @@ mod types;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use humansize::{format_size, BINARY};
 use std::path::PathBuf;
 use types::{RiskLevel, ScanSpeed};
 
@@ -97,6 +98,11 @@ enum Commands {
         #[command(subcommand)]
         action: WhitelistAction,
     },
+    /// Manage scan result cache
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -113,6 +119,14 @@ enum WhitelistAction {
     },
     /// List all whitelisted paths
     List,
+}
+
+#[derive(Subcommand)]
+enum CacheAction {
+    /// Clear the scan cache
+    Clear,
+    /// Show cache information
+    Show,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -356,6 +370,37 @@ fn main() -> anyhow::Result<()> {
                         for path in paths {
                             println!("  {}", path.display());
                         }
+                    }
+                }
+            }
+        }
+        Commands::Cache { action } => {
+            match action {
+                CacheAction::Clear => {
+                    match cache::clear_cache() {
+                        Ok(_) => println!("{}", "Cache cleared successfully".green()),
+                        Err(e) => println!("{}", format!("Failed to clear cache: {}", e).red()),
+                    }
+                }
+                CacheAction::Show => {
+                    match cache::get_cache_age() {
+                        Ok(Some(age)) => {
+                            let mins = age / 60;
+                            let secs = age % 60;
+                            if mins > 0 {
+                                println!("Cache age: {} min {} sec", mins, secs);
+                            } else {
+                                println!("Cache age: {} seconds", secs);
+                            }
+
+                            if let Ok(Some(results)) = cache::load_scan_results(None) {
+                                let total_size: u64 = results.items.iter().map(|i| i.size).sum();
+                                println!("Cached items: {}", results.items.len());
+                                println!("Total size: {}", format_size(total_size, BINARY));
+                            }
+                        }
+                        Ok(None) => println!("{}", "No cache found".yellow()),
+                        Err(e) => println!("{}", format!("Error reading cache: {}", e).red()),
                     }
                 }
             }

@@ -9,13 +9,30 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn run_fresh_scan() -> Result<ScanResults> {
+    // Build ignore list with whitelist
+    let mut ignore_patterns = IgnoreList::new();
+
+    // Load whitelist and add to ignore patterns
+    match WhitelistConfig::load() {
+        Ok(whitelist) => {
+            for path in whitelist.list_paths() {
+                if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                    eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+        }
+    }
+
     let config = ScanConfig {
         speed: ScanSpeed::Normal,
         paths: vec![PathBuf::from(std::env::var("HOME")?)],
         min_file_size_mb: 0, // Don't scan for large files during clean
         max_depth: Some(6),
         find_duplicates: false, // Don't look for duplicates during clean
-        ignore_patterns: IgnoreList::new(),
+        ignore_patterns,
         size_range: None,
         age_criteria: None,
         interactive_mode: false,

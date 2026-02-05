@@ -10,12 +10,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
 
 pub fn scan(config: ScanConfig) -> Result<ScanResults> {
-    let items = Arc::new(Mutex::new(Vec::new()));
-
     println!("{}", "Starting dynamic filesystem scan...".cyan());
 
     // Determine max depth based on speed
@@ -29,42 +26,49 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
     pb.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner:.green} {msg}")
-            .unwrap(),
+            .expect("Failed to create progress bar template"),
     );
 
-    // 1. Scan for cache directories
-    pb.set_message("Scanning for cache directories...");
-    scan_cache_directories(&config.paths, max_depth, &items)?;
+    // Single-pass scan for most items (cache, artifacts, logs, large files)
+    pb.set_message("Scanning filesystem...");
+    let mut items = scan_filesystem(&config, max_depth)?;
 
-    // 2. Scan for build artifacts
-    pb.set_message("Scanning for build artifacts...");
-    scan_build_artifacts(&config.paths, max_depth, &items)?;
-
-    // 3. Scan for log files
-    pb.set_message("Scanning for log files...");
-    scan_log_files(&config.paths, max_depth, &items)?;
-
-    // 4. Scan for large files
-    if config.min_file_size_mb > 0 {
-        pb.set_message(format!(
-            "Scanning for files larger than {}MB...",
-            config.min_file_size_mb
-        ));
-        scan_large_files(&config.paths, max_depth, config.min_file_size_mb, &items)?;
-    }
-
-    // 5. Find duplicates
+    // Separate pass for duplicates (requires hashing)
     if config.find_duplicates {
         pb.set_message("Finding duplicate files...");
-        find_duplicates(&config.paths, max_depth, &items)?;
+        let duplicate_items = find_duplicates(&config.paths, max_depth)?;
+        items.extend(duplicate_items);
     }
 
     pb.finish_with_message("Scan complete!".green().to_string());
 
-    let items = Arc::try_unwrap(items).unwrap().into_inner().unwrap();
-
     // Deduplicate nested paths to avoid double-counting
-    let items = deduplicate_nested_paths(items);
+    let mut items = deduplicate_nested_paths(items);
+
+    // Apply size range filter if specified
+    let mut filtered_by_size_count = 0;
+    if let Some(ref size_range) = config.size_range {
+        let original_count = items.len();
+        items.retain(|item| size_range.contains(item.size));
+        filtered_by_size_count = original_count - items.len();
+    }
+
+    // Apply age filter if specified
+    let mut filtered_by_age_count = 0;
+    if let Some(ref age_criteria) = config.age_criteria {
+        let original_count = items.len();
+        items.retain(|item| {
+            // Try to get modification time for the file
+            if let Ok(metadata) = fs::metadata(&item.path) {
+                if let Ok(modified) = metadata.modified() {
+                    return age_criteria.matches(modified);
+                }
+            }
+            // If we can't get modification time, skip the file
+            false
+        });
+        filtered_by_age_count = original_count - items.len();
+    }
 
     let total_size: u64 = items.iter().map(|item| item.size).sum();
 
@@ -72,25 +76,317 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
         items,
         total_size,
         scan_speed: config.speed,
+        excluded_dirs_count: 0,
+        filtered_by_size_count,
+        filtered_by_age_count,
     })
+}
+
+/// Single-pass filesystem scan that checks for all item types
+fn scan_filesystem(config: &ScanConfig, max_depth: usize) -> Result<Vec<CleanableItem>> {
+    let cache_patterns = compile_cache_patterns();
+    let artifact_patterns = get_artifact_patterns();
+    let log_regex = Regex::new(r"\.log$")
+        .expect("Invalid regex pattern for log files");
+    let min_large_file_size = config.min_file_size_mb * 1024 * 1024;
+
+    let skip_dirs = [
+        "Library/Application Support",
+        "Library/Mobile Documents",
+        "Applications",
+        "/System",
+        "/Library",
+        "Library/Mail",
+    ];
+
+    let items: Vec<CleanableItem> = config
+        .paths
+        .par_iter()
+        .flat_map(|base_path| {
+            WalkDir::new(base_path)
+                .max_depth(max_depth)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(|e| match e {
+                    Ok(entry) => Some(entry),
+                    Err(err) => {
+                        eprintln!("Warning: {}", err);
+                        None
+                    }
+                })
+                .filter_map(|entry| {
+                    let path = entry.path();
+                    let path_str = path.to_string_lossy();
+
+                    // Check ignore patterns first
+                    if config.ignore_patterns.should_ignore(path) {
+                        return None;
+                    }
+
+                    // Skip our own target directory
+                    if path_str.contains("/cleanser/target") {
+                        return None;
+                    }
+
+                    // Skip forbidden directories for large file scan
+                    if skip_dirs.iter().any(|skip| path_str.contains(skip)) {
+                        if let Some(name) = path.file_name() {
+                            let name_str = name.to_string_lossy();
+                            if name_str.starts_with('.') && name_str != ".cache" {
+                                return None;
+                            }
+                        }
+                    }
+
+                    if entry.file_type().is_dir() {
+                        // Check cache directories
+                        if let Some(item) = check_cache_directory(path, &cache_patterns) {
+                            return Some(item);
+                        }
+
+                        // Check build artifacts
+                        if let Some(item) = check_build_artifact(path, &artifact_patterns) {
+                            return Some(item);
+                        }
+                    } else if entry.file_type().is_file() {
+                        // Check log files
+                        if let Some(item) = check_log_file(path, &log_regex) {
+                            return Some(item);
+                        }
+
+                        // Check large files
+                        if min_large_file_size > 0 {
+                            if let Some(item) = check_large_file(path, min_large_file_size) {
+                                return Some(item);
+                            }
+                        }
+                    }
+
+                    None
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    Ok(items)
+}
+
+/// Helper function to compile cache regex patterns
+fn compile_cache_patterns() -> Vec<Regex> {
+    let cache_patterns = [
+        r"(?i)cache$",
+        r"(?i)\.cache$",
+        r"(?i)caches$",
+        r"Library/Caches",
+    ];
+
+    cache_patterns
+        .iter()
+        .filter_map(|p| Regex::new(p).ok())
+        .collect()
+}
+
+/// Helper function to get artifact patterns
+fn get_artifact_patterns() -> Vec<(&'static str, CleanCategory, RiskLevel)> {
+    vec![
+        ("node_modules", CleanCategory::NodeModules, RiskLevel::Moderate),
+        ("target", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        ("build", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        ("dist", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        (".gradle", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        (".maven", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        ("__pycache__", CleanCategory::BuildArtifacts, RiskLevel::Safe),
+        (".pytest_cache", CleanCategory::BuildArtifacts, RiskLevel::Safe),
+        (".next", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        (".nuxt", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+        ("out", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
+    ]
+}
+
+/// Check if a directory is a cache directory
+fn check_cache_directory(path: &Path, regexes: &[Regex]) -> Option<CleanableItem> {
+    let path_str = path.to_string_lossy();
+
+    // Special handling for Library/Caches - scan inside for individual app caches
+    // instead of trying to delete the protected parent directory
+    if path_str.ends_with("Library/Caches") {
+        // Don't return the parent Library/Caches directory itself
+        // WalkDir will continue scanning inside and we'll catch individual app caches
+        return None;
+    }
+
+    // Check if this is an individual app cache inside Library/Caches
+    if let Some(parent) = path.parent() {
+        let parent_str = parent.to_string_lossy();
+        if parent_str.ends_with("Library/Caches") {
+            // This is a direct child of Library/Caches (e.g., com.google.Chrome)
+            if let Ok(size) = get_dir_size(path) {
+                if size > 1024 * 1024 { // > 1MB
+                    return Some(CleanableItem {
+                        path: path.to_path_buf(),
+                        size,
+                        category: CleanCategory::SystemCache,
+                        risk_level: RiskLevel::Safe,
+                        description: format!(
+                            "App cache: {}",
+                            path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "unknown".to_string())
+                        ),
+                    });
+                }
+            }
+            return None;
+        }
+    }
+
+    // For all other cache directories, use the existing logic
+    for regex in regexes {
+        if regex.is_match(&path_str) {
+            if let Ok(size) = get_dir_size(path) {
+                if size > 1024 * 1024 { // > 1MB
+                    let category = categorize_cache(path);
+                    let risk = match category {
+                        CleanCategory::SystemCache => RiskLevel::Safe,
+                        CleanCategory::BrowserCache => RiskLevel::Safe,
+                        _ => RiskLevel::Safe,
+                    };
+
+                    return Some(CleanableItem {
+                        path: path.to_path_buf(),
+                        size,
+                        category,
+                        risk_level: risk,
+                        description: format!(
+                            "Cache directory: {}",
+                            path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "unknown".to_string())
+                        ),
+                    });
+                }
+            }
+            break;
+        }
+    }
+    None
+}
+
+/// Check if a directory is a build artifact
+fn check_build_artifact(
+    path: &Path,
+    patterns: &[(&str, CleanCategory, RiskLevel)],
+) -> Option<CleanableItem> {
+    let dir_name = match path.file_name() {
+        Some(name) => name.to_string_lossy(),
+        None => return None,
+    };
+
+    for (pattern, category, risk) in patterns {
+        if dir_name == *pattern {
+            // Special handling for 'target' - check if it's a Rust project
+            if *pattern == "target" {
+                if let Some(parent) = path.parent() {
+                    if !parent.join("Cargo.toml").exists() {
+                        continue;
+                    }
+                }
+            }
+
+            // Special handling for 'build', 'dist', 'out' - check for project files
+            if *pattern == "build" || *pattern == "dist" || *pattern == "out" {
+                if let Some(parent) = path.parent() {
+                    let has_project_file = parent.join("package.json").exists()
+                        || parent.join("build.gradle").exists()
+                        || parent.join("pom.xml").exists()
+                        || parent.join("go.mod").exists();
+
+                    if !has_project_file {
+                        continue;
+                    }
+                }
+            }
+
+            if let Ok(size) = get_dir_size(path) {
+                if size > 1024 * 1024 {
+                    return Some(CleanableItem {
+                        path: path.to_path_buf(),
+                        size,
+                        category: *category,
+                        risk_level: *risk,
+                        description: format!("{} directory", pattern),
+                    });
+                }
+            }
+            break;
+        }
+    }
+    None
+}
+
+/// Check if a file is a large log file
+fn check_log_file(path: &Path, log_regex: &Regex) -> Option<CleanableItem> {
+    // Only check in log directories
+    let path_str = path.to_string_lossy();
+    if !path_str.contains("/Library/Logs") && !path_str.contains("/logs") && !path_str.contains("/.logs") {
+        return None;
+    }
+
+    if log_regex.is_match(&path_str) {
+        if let Ok(metadata) = fs::metadata(path) {
+            let size = metadata.len();
+            if size > 10 * 1024 * 1024 { // > 10MB
+                return Some(CleanableItem {
+                    path: path.to_path_buf(),
+                    size,
+                    category: if path_str.contains("Library/Logs") {
+                        CleanCategory::SystemLogs
+                    } else {
+                        CleanCategory::AppLogs
+                    },
+                    risk_level: RiskLevel::Safe,
+                    description: format!("Large log file ({})", format_size(size, BINARY)),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// Check if a file is a large file
+fn check_large_file(path: &Path, min_size: u64) -> Option<CleanableItem> {
+    if let Ok(metadata) = fs::metadata(path) {
+        let size = metadata.len();
+        if size >= min_size {
+            return Some(CleanableItem {
+                path: path.to_path_buf(),
+                size,
+                category: CleanCategory::LargeFiles,
+                risk_level: RiskLevel::Risky,
+                description: format!("Large file ({})", format_size(size, BINARY)),
+            });
+        }
+    }
+    None
 }
 
 fn deduplicate_nested_paths(items: Vec<CleanableItem>) -> Vec<CleanableItem> {
     let mut sorted_items = items;
 
-    // Sort by path length (shortest first) so parent directories come before their children
-    sorted_items.sort_by(|a, b| a.path.len().cmp(&b.path.len()));
+    // Sort by path component count (shortest first) so parent directories come before their children
+    sorted_items.sort_by(|a, b| {
+        let a_components = a.path.components().count();
+        let b_components = b.path.components().count();
+        a_components.cmp(&b_components)
+    });
 
     let mut deduplicated = Vec::new();
 
     for item in sorted_items {
-        let path = Path::new(&item.path);
-
         // Check if this item is a child of any already-kept item
         let is_child = deduplicated.iter().any(|kept: &CleanableItem| {
-            let kept_path = Path::new(&kept.path);
             // An item is a child if it starts with a kept path and is not the same path
-            path.starts_with(kept_path) && path != kept_path
+            item.path.starts_with(&kept.path) && item.path != kept.path
         });
 
         // Only keep items that are not children of already-kept items
@@ -102,297 +398,7 @@ fn deduplicate_nested_paths(items: Vec<CleanableItem>) -> Vec<CleanableItem> {
     deduplicated
 }
 
-fn scan_cache_directories(
-    paths: &[String],
-    max_depth: usize,
-    items: &Arc<Mutex<Vec<CleanableItem>>>,
-) -> Result<()> {
-    let cache_patterns = [
-        r"(?i)cache$",
-        r"(?i)\.cache$",
-        r"(?i)caches$",
-        r"Library/Caches",
-    ];
-
-    let regexes: Vec<Regex> = cache_patterns
-        .iter()
-        .filter_map(|p| Regex::new(p).ok())
-        .collect();
-
-    for base_path in paths {
-        for entry in WalkDir::new(base_path)
-            .max_depth(max_depth)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if !entry.file_type().is_dir() {
-                continue;
-            }
-
-            let path = entry.path();
-            let path_str = path.to_string_lossy();
-
-            // Skip our own target directory
-            if path_str.contains("/target/") || path_str.contains("/cleanser/") {
-                continue;
-            }
-
-            for regex in &regexes {
-                if regex.is_match(&path_str) {
-                    if let Ok(size) = get_dir_size(path) {
-                        if size > 1024 * 1024 {
-                            // > 1MB
-                            let category = categorize_cache(path);
-                            let risk = match category {
-                                CleanCategory::SystemCache => RiskLevel::Safe,
-                                CleanCategory::BrowserCache => RiskLevel::Safe,
-                                _ => RiskLevel::Safe,
-                            };
-
-                            items.lock().unwrap().push(CleanableItem {
-                                path: path.display().to_string(),
-                                size,
-                                category,
-                                risk_level: risk,
-                                description: format!(
-                                    "Cache directory: {}",
-                                    path.file_name().unwrap_or_default().to_string_lossy()
-                                ),
-                            });
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn scan_build_artifacts(
-    paths: &[String],
-    max_depth: usize,
-    items: &Arc<Mutex<Vec<CleanableItem>>>,
-) -> Result<()> {
-    let artifact_patterns = vec![
-        (
-            "node_modules",
-            CleanCategory::NodeModules,
-            RiskLevel::Moderate,
-        ),
-        ("target", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        ("build", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        ("dist", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        (
-            ".gradle",
-            CleanCategory::BuildArtifacts,
-            RiskLevel::Moderate,
-        ),
-        (".maven", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        (
-            "__pycache__",
-            CleanCategory::BuildArtifacts,
-            RiskLevel::Safe,
-        ),
-        (
-            ".pytest_cache",
-            CleanCategory::BuildArtifacts,
-            RiskLevel::Safe,
-        ),
-        (".next", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        (".nuxt", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-        ("out", CleanCategory::BuildArtifacts, RiskLevel::Moderate),
-    ];
-
-    for base_path in paths {
-        for entry in WalkDir::new(base_path)
-            .max_depth(max_depth)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if !entry.file_type().is_dir() {
-                continue;
-            }
-
-            let path = entry.path();
-            let path_str = path.to_string_lossy();
-
-            // Skip our own target directory
-            if path_str.contains("/cleanser/target") {
-                continue;
-            }
-
-            let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
-
-            for (pattern, category, risk) in &artifact_patterns {
-                if dir_name == *pattern {
-                    // Special handling for 'target' - check if it's a Rust project
-                    if *pattern == "target" {
-                        if let Some(parent) = path.parent() {
-                            if !parent.join("Cargo.toml").exists() {
-                                continue;
-                            }
-                        }
-                    }
-
-                    // Special handling for 'build', 'dist', 'out' - check for project files
-                    if *pattern == "build" || *pattern == "dist" || *pattern == "out" {
-                        if let Some(parent) = path.parent() {
-                            let has_project_file = parent.join("package.json").exists()
-                                || parent.join("build.gradle").exists()
-                                || parent.join("pom.xml").exists()
-                                || parent.join("go.mod").exists();
-
-                            if !has_project_file {
-                                continue;
-                            }
-                        }
-                    }
-
-                    if let Ok(size) = get_dir_size(path) {
-                        if size > 1024 * 1024 {
-                            items.lock().unwrap().push(CleanableItem {
-                                path: path.display().to_string(),
-                                size,
-                                category: *category,
-                                risk_level: *risk,
-                                description: format!("{} directory", pattern),
-                            });
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn scan_log_files(
-    paths: &[String],
-    _max_depth: usize,
-    items: &Arc<Mutex<Vec<CleanableItem>>>,
-) -> Result<()> {
-    let log_regex = Regex::new(r"\.log$").unwrap();
-
-    for base_path in paths {
-        let log_paths = vec![
-            format!("{}/Library/Logs", base_path),
-            format!("{}/logs", base_path),
-            format!("{}/.logs", base_path),
-        ];
-
-        for log_path in log_paths {
-            if !Path::new(&log_path).exists() {
-                continue;
-            }
-
-            for entry in WalkDir::new(&log_path)
-                .max_depth(3)
-                .follow_links(false)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                let path = entry.path();
-
-                if entry.file_type().is_file() && log_regex.is_match(&path.to_string_lossy()) {
-                    if let Ok(metadata) = fs::metadata(path) {
-                        let size = metadata.len();
-                        if size > 10 * 1024 * 1024 {
-                            items.lock().unwrap().push(CleanableItem {
-                                path: path.display().to_string(),
-                                size,
-                                category: if path.to_string_lossy().contains("Library/Logs") {
-                                    CleanCategory::SystemLogs
-                                } else {
-                                    CleanCategory::AppLogs
-                                },
-                                risk_level: RiskLevel::Safe,
-                                description: format!(
-                                    "Large log file ({})",
-                                    format_size(size, BINARY)
-                                ),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn scan_large_files(
-    paths: &[String],
-    max_depth: usize,
-    min_size_mb: u64,
-    items: &Arc<Mutex<Vec<CleanableItem>>>,
-) -> Result<()> {
-    let min_size = min_size_mb * 1024 * 1024;
-
-    let skip_dirs = [
-        "Library/Application Support",
-        "Library/Mobile Documents",
-        "Applications",
-        "/System",
-        "/Library",
-        "Library/Mail",
-    ];
-
-    for base_path in paths {
-        for entry in WalkDir::new(base_path)
-            .max_depth(max_depth)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            let path_str = path.to_string_lossy();
-
-            if skip_dirs.iter().any(|skip| path_str.contains(skip)) {
-                continue;
-            }
-
-            if let Some(name) = path.file_name() {
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with('.') && name_str != ".cache" {
-                    continue;
-                }
-            }
-
-            if entry.file_type().is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    let size = metadata.len();
-                    if size >= min_size {
-                        items.lock().unwrap().push(CleanableItem {
-                            path: path.display().to_string(),
-                            size,
-                            category: CleanCategory::LargeFiles,
-                            risk_level: RiskLevel::Risky,
-                            description: format!("Large file ({})", format_size(size, BINARY)),
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn find_duplicates(
-    paths: &[String],
-    max_depth: usize,
-    items: &Arc<Mutex<Vec<CleanableItem>>>,
-) -> Result<()> {
-    let file_map: Arc<Mutex<HashMap<FileHash, Vec<PathBuf>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-
+fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableItem>> {
     let mut files_to_hash = Vec::new();
 
     for base_path in paths {
@@ -400,7 +406,13 @@ fn find_duplicates(
             .max_depth(max_depth)
             .follow_links(false)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(|e| match e {
+                Ok(entry) => Some(entry),
+                Err(err) => {
+                    eprintln!("Warning: {}", err);
+                    None
+                }
+            })
         {
             if entry.file_type().is_file() {
                 if let Ok(metadata) = entry.metadata() {
@@ -413,24 +425,29 @@ fn find_duplicates(
         }
     }
 
-    files_to_hash.par_iter().for_each(|(path, size)| {
-        if let Ok(hash) = hash_file(path) {
-            let file_hash = FileHash { hash, size: *size };
-            file_map
-                .lock()
-                .unwrap()
-                .entry(file_hash)
-                .or_default()
-                .push(path.clone());
-        }
-    });
+    // Hash files in parallel and collect into a HashMap
+    let file_hashes: Vec<(FileHash, PathBuf)> = files_to_hash
+        .par_iter()
+        .filter_map(|(path, size)| {
+            hash_file(path).ok().map(|hash| {
+                (FileHash { hash, size: *size }, path.clone())
+            })
+        })
+        .collect();
 
-    let file_map = file_map.lock().unwrap();
+    // Group by hash
+    let mut file_map: HashMap<FileHash, Vec<PathBuf>> = HashMap::new();
+    for (file_hash, path) in file_hashes {
+        file_map.entry(file_hash).or_default().push(path);
+    }
+
+    // Create CleanableItems for duplicates
+    let mut duplicate_items = Vec::new();
     for (file_hash, paths_list) in file_map.iter() {
         if paths_list.len() > 1 {
             for path in paths_list.iter().skip(1) {
-                items.lock().unwrap().push(CleanableItem {
-                    path: path.display().to_string(),
+                duplicate_items.push(CleanableItem {
+                    path: path.clone(),
                     size: file_hash.size,
                     category: CleanCategory::DuplicateFiles,
                     risk_level: RiskLevel::Risky,
@@ -444,7 +461,7 @@ fn find_duplicates(
         }
     }
 
-    Ok(())
+    Ok(duplicate_items)
 }
 
 fn hash_file(path: &Path) -> Result<String> {
@@ -464,19 +481,16 @@ fn hash_file(path: &Path) -> Result<String> {
 }
 
 fn get_dir_size(path: &Path) -> Result<u64> {
-    let mut total = 0;
-
-    for entry in WalkDir::new(path)
+    // Parallel directory size calculation using Rayon's par_bridge()
+    let total: u64 = WalkDir::new(path)
         .follow_links(false)
         .into_iter()
+        .par_bridge()  // Parallelize the iteration
         .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total += metadata.len();
-            }
-        }
-    }
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum();
 
     Ok(total)
 }
@@ -554,7 +568,7 @@ pub fn display_results(results: &ScanResults) {
                     println!(
                         "    {} - {}",
                         format_size(item.size, BINARY),
-                        item.path.dimmed()
+                        item.path.display().to_string().dimmed()
                     );
                 }
                 if cat_items.len() > 3 {

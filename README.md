@@ -30,6 +30,12 @@ cleanser clean --risk safe
 - **Large file detection**: Find files above a configurable size threshold (default 100MB)
 - **Duplicate file finder**: SHA-256 based detection of duplicate files with parallel hashing
 - **Custom scan paths**: Scan specific directories instead of just your home folder
+- **Directory exclusion**: Exclude specific directories with `--ignore` flag (supports multiple patterns)
+- **Size range filtering**: Filter results by file size ranges (e.g., `--size-range 100MB-500MB`)
+- **Age-based filtering**: Target files by modification date (e.g., `--older-than 90d`, `--newer-than 7d`)
+- **Persistent whitelist**: Maintain a permanent list of directories to never scan or clean
+- **Interactive TUI mode**: Visual file browser with keyboard navigation for selecting files to delete
+- **Interactive large file deletion**: File-by-file prompts for reviewing large files before deletion
 - **Risk-based cleanup**: Safe, Moderate, or Risky levels to control what gets deleted
 - **Interactive confirmations**: Prevent accidental deletions with built-in prompts
 - **Dry-run mode**: Preview what would be deleted without actually deleting
@@ -147,20 +153,53 @@ cleanser scan --speed thorough
 # Scan specific directories
 cleanser scan --paths ~/Projects ~/Downloads
 
+# Exclude directories from scanning
+cleanser scan --ignore ~/Projects/important --ignore ~/Documents/work
+
 # Find large files over 500MB
 cleanser scan --min-size 500
+
+# Filter by size range
+cleanser scan --size-range 100MB-500MB  # Files between 100-500MB
+cleanser scan --size-range 100MB-       # Files larger than 100MB
+cleanser scan --size-range -500MB       # Files smaller than 500MB
+
+# Filter by file age
+cleanser scan --older-than 90d          # Files not modified in 90 days
+cleanser scan --newer-than 7d           # Files modified in last 7 days
+cleanser scan --older-than 6m --newer-than 1m  # Files 1-6 months old
 
 # Find duplicate files (uses SHA-256 hashing)
 cleanser scan --find-duplicates
 
+# Interactive mode - visual file browser
+cleanser scan --interactive
+
 # Limit scan depth
 cleanser scan --max-depth 4
 
-# Combine options: scan Projects for large files and duplicates
-cleanser scan --paths ~/Projects --min-size 100 --find-duplicates --speed thorough
+# Combine options: scan Projects for large old files
+cleanser scan --paths ~/Projects --size-range 100MB- --older-than 90d --ignore ~/Projects/active
 
 # Output as JSON
 cleanser scan --json
+```
+
+### Manage whitelist (permanent exclusions)
+
+```bash
+# Add paths to whitelist
+cleanser whitelist add ~/Projects/important
+cleanser whitelist add ~/Documents/work
+
+# Remove from whitelist
+cleanser whitelist remove ~/Projects/old
+
+# List all whitelisted paths
+cleanser whitelist list
+
+# Whitelisted paths are automatically excluded from all scans
+cleanser scan  # Will skip whitelisted directories
 ```
 
 ### Clean files
@@ -169,6 +208,9 @@ cleanser scan --json
 # Clean only safe items (default)
 # Uses cached scan results if available (< 1 hour old)
 cleanser clean
+
+# Interactive mode - review large files one by one
+cleanser clean --interactive
 
 # Force a fresh scan instead of using cache
 cleanser clean --force-scan
@@ -351,9 +393,13 @@ MIT
 - [x] Add more development tool caches (Gradle, Maven, .next, .nuxt, etc.)
 - [x] Dynamic pattern-based discovery of caches and build artifacts
 - [x] Smart caching system to avoid re-scanning on clean operations
+- [x] Add configurable exclusion patterns (--ignore flag)
+- [x] Add interactive TUI mode for reviewing files before deletion
+- [x] Add persistent whitelist configuration
+- [x] Add size range filtering
+- [x] Add age-based file targeting
 - [ ] Add configurable exclusion patterns (regex-based)
 - [ ] Add scheduled cleanup support (cron integration)
-- [ ] Add interactive TUI mode for reviewing files before deletion
 - [ ] Generate detailed cleanup reports (HTML/PDF)
 - [ ] Add compression detection (find already-compressed files in archives)
 - [ ] Support for other operating systems (Linux, Windows)

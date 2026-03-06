@@ -3,11 +3,11 @@ name = "cleanser"
 version = "0.3.0"
 edition = "2021"
 authors = ["Pedro Henrique"]
-description = "A fast CLI tool for clearing macOS storage space"
+description = "A fast cross-platform CLI tool for clearing storage space"
 license = "MIT"
 repository = "https://github.com/phpfc/cleanser"
 homepage = "https://github.com/phpfc/cleanser"
-keywords = ["cli", "cleanup", "storage", "macos", "cache"]
+keywords = ["cli", "cleanup", "storage", "cross-platform", "cache"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 
@@ -26,6 +26,7 @@ indicatif = "0.17"
 ratatui = "0.26"
 crossterm = "0.27"
 chrono = "0.4"
+dirs = "5.0"
 
 [dev-dependencies]
 tempfile = "3.8"

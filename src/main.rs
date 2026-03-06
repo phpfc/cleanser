@@ -1,6 +1,9 @@
 mod cache;
 mod cleaner;
+mod mapper;
+mod platform;
 mod scanner;
+mod scanner_v2;
 mod tui;
 mod types;
 
@@ -12,7 +15,7 @@ use types::{RiskLevel, ScanSpeed};
 
 #[derive(Parser)]
 #[command(name = "cleanser")]
-#[command(about = "A fast CLI tool for clearing macOS storage space", long_about = None)]
+#[command(about = "A fast cross-platform CLI tool for clearing storage space", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -103,6 +106,11 @@ enum Commands {
         #[command(subcommand)]
         action: CacheAction,
     },
+    /// Manage filesystem map
+    Map {
+        #[command(subcommand)]
+        action: MapAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -127,6 +135,242 @@ enum CacheAction {
     Clear,
     /// Show cache information
     Show,
+}
+
+#[derive(Subcommand)]
+enum MapAction {
+    /// Show the current filesystem map
+    Show,
+    /// Rebuild the filesystem map
+    Rebuild {
+        /// Maximum depth for scanning
+        #[arg(long, default_value = "10")]
+        max_depth: usize,
+
+        /// Minimum confidence level (0.0-1.0)
+        #[arg(long, default_value = "0.6")]
+        min_confidence: f32,
+    },
+    /// Show statistics about the filesystem map
+    Stats,
+    /// Verify the filesystem map (check if paths still exist)
+    Verify,
+    /// Suggest whitelist entries based on the map
+    Suggest,
+}
+
+fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
+    use mapper::{FileSystemCrawler, FileSystemMap};
+    use mapper::filesystem_map::DirectoryCategory;
+
+    match action {
+        MapAction::Show => {
+            match FileSystemMap::load() {
+                Ok(map) => {
+                    println!("{}", "Filesystem Map:".cyan().bold());
+                    println!("Version: {}", map.version);
+                    println!("Total directories: {}", map.total_directories);
+
+                    let created = chrono::DateTime::from_timestamp(map.created_at as i64, 0)
+                        .unwrap_or_default();
+                    let updated = chrono::DateTime::from_timestamp(map.last_updated as i64, 0)
+                        .unwrap_or_default();
+
+                    println!("Created: {}", created.format("%Y-%m-%d %H:%M:%S"));
+                    println!("Last updated: {}", updated.format("%Y-%m-%d %H:%M:%S"));
+
+                    if map.is_stale() {
+                        println!("{}", "⚠ Map is stale (>7 days old). Consider rebuilding.".yellow());
+                    }
+
+                    println!("\n{}", "By Category:".cyan());
+                    let stats = map.stats_by_category();
+                    for (category, (count, size)) in stats {
+                        println!("  {:?}: {} directories, {}", category, count, format_size(size, BINARY));
+                    }
+
+                    println!("\n{}", "Top Tags:".cyan());
+                    let tag_stats = map.stats_by_tag();
+                    let mut tag_vec: Vec<_> = tag_stats.iter().collect();
+                    tag_vec.sort_by(|a, b| b.1.1.cmp(&a.1.1)); // Sort by size
+                    for (tag, (count, size)) in tag_vec.iter().take(10) {
+                        println!("  {}: {} dirs, {}", tag, count, format_size(*size, BINARY));
+                    }
+
+                    println!("\nTotal mapped size: {}", format_size(map.total_size(), BINARY));
+                }
+                Err(e) => {
+                    println!("{}", format!("No filesystem map found: {}", e).yellow());
+                    println!("{}", "Run 'cleanser map rebuild' to create one.".cyan());
+                }
+            }
+        }
+        MapAction::Rebuild { max_depth, min_confidence } => {
+            println!("{}", "Rebuilding filesystem map...".cyan());
+
+            let crawler = FileSystemCrawler::new()
+                .with_max_depth(max_depth)
+                .with_min_confidence(min_confidence)
+                .with_progress(true);
+
+            let map = crawler.crawl_full()?;
+            map.save()?;
+
+            println!("{}", "Filesystem map rebuilt successfully!".green());
+            println!("Total directories mapped: {}", map.total_directories);
+            println!("Total size: {}", format_size(map.total_size(), BINARY));
+        }
+        MapAction::Stats => {
+            match FileSystemMap::load() {
+                Ok(map) => {
+                    println!("{}", "Filesystem Map Statistics:".cyan().bold());
+                    println!("\n{}", "By Category:".cyan());
+
+                    let stats = map.stats_by_category();
+                    let mut stats_vec: Vec<_> = stats.iter().collect();
+                    stats_vec.sort_by(|a, b| b.1.1.cmp(&a.1.1)); // Sort by size
+
+                    for (category, (count, size)) in stats_vec {
+                        println!("  {:20} {:>6} dirs  {:>12}",
+                            format!("{:?}", category),
+                            count,
+                            format_size(*size, BINARY)
+                        );
+                    }
+
+                    println!("\n{}", "By Tag (Top 20):".cyan());
+                    let tag_stats = map.stats_by_tag();
+                    let mut tag_vec: Vec<_> = tag_stats.iter().collect();
+                    tag_vec.sort_by(|a, b| b.1.1.cmp(&a.1.1));
+
+                    for (tag, (count, size)) in tag_vec.iter().take(20) {
+                        println!("  {:20} {:>6} dirs  {:>12}",
+                            tag,
+                            count,
+                            format_size(*size, BINARY)
+                        );
+                    }
+
+                    println!("\n{}", "By Confidence Level:".cyan());
+                    let high_conf = map.get_by_confidence(0.9);
+                    let med_conf = map.get_by_confidence(0.7)
+                        .iter()
+                        .filter(|d| d.confidence < 0.9)
+                        .count();
+                    let low_conf = map.directories.values()
+                        .filter(|d| d.confidence < 0.7)
+                        .count();
+
+                    println!("  High (≥0.9): {} directories", high_conf.len());
+                    println!("  Med (0.7-0.9): {} directories", med_conf);
+                    println!("  Low (<0.7): {} directories", low_conf);
+
+                    println!("\n{}", "Top 10 Largest Directories:".cyan());
+                    let mut dirs: Vec<_> = map.directories.values().collect();
+                    dirs.sort_by(|a, b| b.estimated_size.cmp(&a.estimated_size));
+
+                    for (i, dir) in dirs.iter().take(10).enumerate() {
+                        let tags_str = if !dir.tags.is_empty() {
+                            format!(" [{}]", dir.tags.join(", "))
+                        } else {
+                            String::new()
+                        };
+                        println!("  {}. {}{} - {} ({:.1}% confidence)",
+                            i + 1,
+                            dir.path.display(),
+                            tags_str,
+                            format_size(dir.estimated_size, BINARY),
+                            dir.confidence * 100.0
+                        );
+                    }
+                }
+                Err(e) => {
+                    println!("{}", format!("No filesystem map found: {}", e).yellow());
+                    println!("{}", "Run 'cleanser map rebuild' to create one.".cyan());
+                }
+            }
+        }
+        MapAction::Verify => {
+            match FileSystemMap::load() {
+                Ok(mut map) => {
+                    println!("{}", "Verifying filesystem map...".cyan());
+
+                    let total_dirs = map.directories.len();
+                    let invalid: Vec<_> = map.directories.iter()
+                        .filter(|(path, _)| !path.exists())
+                        .map(|(path, _)| path.clone())
+                        .collect();
+
+                    if invalid.is_empty() {
+                        println!("{}", "✓ All directories in the map still exist.".green());
+                    } else {
+                        println!("{}", format!("Found {} invalid entries:", invalid.len()).yellow());
+                        for path in &invalid {
+                            println!("  - {}", path.display());
+                        }
+
+                        println!("\nCleaning up invalid entries...");
+                        map.cleanup_invalid();
+                        map.save()?;
+
+                        println!("{}", format!("Removed {} invalid entries. {} remain.",
+                            invalid.len(),
+                            total_dirs - invalid.len()
+                        ).green());
+                    }
+                }
+                Err(e) => {
+                    println!("{}", format!("No filesystem map found: {}", e).yellow());
+                }
+            }
+        }
+        MapAction::Suggest => {
+            match FileSystemMap::load() {
+                Ok(map) => {
+                    println!("{}", "Suggested Whitelist Entries:".cyan().bold());
+                    println!("{}", "(Based on high-confidence, low-risk directories)\n".dimmed());
+
+                    // Load current whitelist
+                    let whitelist = types::WhitelistConfig::load()?;
+
+                    // Find directories that should be whitelisted
+                    let suggestions: Vec<_> = map.directories.values()
+                        .filter(|d| {
+                            d.confidence >= 0.95 &&
+                            !whitelist.contains(&d.path) &&
+                            matches!(d.category, DirectoryCategory::System | DirectoryCategory::UserContent)
+                        })
+                        .collect();
+
+                    if suggestions.is_empty() {
+                        println!("{}", "No suggestions found.".green());
+                        println!("Your current whitelist seems comprehensive!");
+                    } else {
+                        println!("Found {} recommended whitelist additions:\n", suggestions.len());
+
+                        for (i, dir) in suggestions.iter().enumerate() {
+                            println!("{}. {}", i + 1, dir.path.display());
+                            println!("   Category: {:?}, Tags: [{}], Confidence: {:.1}%",
+                                dir.category,
+                                dir.tags.join(", "),
+                                dir.confidence * 100.0
+                            );
+                            println!();
+                        }
+
+                        println!("{}", "To add these to your whitelist, use:".cyan());
+                        println!("  cleanser whitelist add <path>");
+                    }
+                }
+                Err(e) => {
+                    println!("{}", format!("No filesystem map found: {}", e).yellow());
+                    println!("{}", "Run 'cleanser map rebuild' to create one.".cyan());
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -630,6 +874,9 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+        }
+        Commands::Map { action } => {
+            handle_map_command(action)?;
         }
     }
 

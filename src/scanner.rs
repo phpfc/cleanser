@@ -110,7 +110,12 @@ fn scan_filesystem(config: &ScanConfig, max_depth: usize) -> Result<Vec<Cleanabl
                 .filter_map(|e| match e {
                     Ok(entry) => Some(entry),
                     Err(err) => {
-                        eprintln!("Warning: {}", err);
+                        // Only show non-permission errors
+                        let err_str = err.to_string();
+                        if !err_str.contains("Operation not permitted") &&
+                           !err_str.contains("Permission denied") {
+                            eprintln!("Warning: {}", err);
+                        }
                         None
                     }
                 })
@@ -409,7 +414,12 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
             .filter_map(|e| match e {
                 Ok(entry) => Some(entry),
                 Err(err) => {
-                    eprintln!("Warning: {}", err);
+                    // Only show non-permission errors
+                    let err_str = err.to_string();
+                    if !err_str.contains("Operation not permitted") &&
+                       !err_str.contains("Permission denied") {
+                        eprintln!("Warning: {}", err);
+                    }
                     None
                 }
             })

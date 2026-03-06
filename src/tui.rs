@@ -16,6 +16,7 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
+use std::path::PathBuf;
 use std::time::SystemTime;
 
 pub fn run_interactive_mode(scan_results: &ScanResults) -> Result<Vec<FileItem>> {
@@ -80,10 +81,10 @@ fn run_tui_loop(
                     // Cancel - return empty list
                     return Ok(Vec::new());
                 }
-                KeyCode::Up => {
+                KeyCode::Up | KeyCode::Char('k') => {
                     state.move_cursor_up();
                 }
-                KeyCode::Down => {
+                KeyCode::Down | KeyCode::Char('j') => {
                     state.move_cursor_down();
                 }
                 KeyCode::Char(' ') => {
@@ -97,6 +98,34 @@ fn run_tui_loop(
                     }
                     return Ok(state.get_selected_items().into_iter().cloned().collect());
                 }
+                // Sort by size (descending - heaviest first)
+                KeyCode::Char('s') => {
+                    state.set_sort_mode(SortMode::SizeDesc);
+                }
+                // Sort by size (ascending - lightest first)
+                KeyCode::Char('S') => {
+                    state.set_sort_mode(SortMode::SizeAsc);
+                }
+                // Sort by date (oldest first)
+                KeyCode::Char('d') => {
+                    state.set_sort_mode(SortMode::DateOldest);
+                }
+                // Sort by date (newest first)
+                KeyCode::Char('D') => {
+                    state.set_sort_mode(SortMode::DateNewest);
+                }
+                // Sort by path (A-Z)
+                KeyCode::Char('p') => {
+                    state.set_sort_mode(SortMode::PathAsc);
+                }
+                // Sort by path (Z-A)
+                KeyCode::Char('P') => {
+                    state.set_sort_mode(SortMode::PathDesc);
+                }
+                // Cycle through sort modes
+                KeyCode::Tab => {
+                    state.cycle_sort_mode();
+                }
                 _ => {}
             }
         }
@@ -107,10 +136,10 @@ fn render_ui(f: &mut Frame, state: &TuiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),      // Header
+            Constraint::Length(4),      // Header (expanded to 4 for 2 lines)
             Constraint::Min(10),         // File list
             Constraint::Length(6),       // Details panel
-            Constraint::Length(3),       // Help footer
+            Constraint::Length(4),       // Help footer (expanded to 4 for 2 lines)
         ])
         .split(f.size());
 
@@ -128,15 +157,29 @@ fn render_ui(f: &mut Frame, state: &TuiState) {
 }
 
 fn render_header(f: &mut Frame, area: Rect, state: &TuiState) {
-    let title = format!(
-        "Cleanser Interactive Mode - {} items ({} selected, {})",
-        state.items.len(),
-        state.selected_count,
-        format_size(state.total_selected_size, BINARY)
-    );
+    let title = vec![
+        Line::from(vec![
+            Span::styled(
+                format!("Cleanser Interactive Mode - {} items", state.items.len()),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Selected: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} items ({})", state.selected_count, format_size(state.total_selected_size, BINARY)),
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  |  "),
+            Span::styled("Sort: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{}", state.sort_mode),
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+    ];
 
     let header = Paragraph::new(title)
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .block(Block::default().borders(Borders::ALL));
 
     f.render_widget(header, area);
@@ -231,11 +274,31 @@ fn render_details(f: &mut Frame, area: Rect, state: &TuiState) {
 }
 
 fn render_footer(f: &mut Frame, area: Rect) {
-    let help_text = "↑/↓: Navigate | Space: Select | Enter: Delete | Esc/q: Exit";
-    
+    let help_text = vec![
+        Line::from(vec![
+            Span::styled("↑/↓/j/k", Style::default().fg(Color::Yellow)),
+            Span::raw(": Navigate  "),
+            Span::styled("Space", Style::default().fg(Color::Yellow)),
+            Span::raw(": Select  "),
+            Span::styled("Enter", Style::default().fg(Color::Green)),
+            Span::raw(": Delete  "),
+            Span::styled("Esc/q", Style::default().fg(Color::Red)),
+            Span::raw(": Exit"),
+        ]),
+        Line::from(vec![
+            Span::styled("Tab", Style::default().fg(Color::Cyan)),
+            Span::raw(": Cycle sort  "),
+            Span::styled("s/S", Style::default().fg(Color::Cyan)),
+            Span::raw(": Size ↓/↑  "),
+            Span::styled("d/D", Style::default().fg(Color::Cyan)),
+            Span::raw(": Date ↑/↓  "),
+            Span::styled("p/P", Style::default().fg(Color::Cyan)),
+            Span::raw(": Path A-Z/Z-A"),
+        ]),
+    ];
+
     let footer = Paragraph::new(help_text)
-        .style(Style::default().fg(Color::Gray))
-        .block(Block::default().borders(Borders::ALL));
+        .block(Block::default().borders(Borders::ALL).title("Help"));
 
     f.render_widget(footer, area);
 }
@@ -258,48 +321,70 @@ fn format_system_time(time: SystemTime) -> String {
 pub fn run_interactive_large_file_deletion(
     items: &[CleanableItem],
     dry_run: bool,
+    deleted_paths: &mut Vec<PathBuf>,
 ) -> Result<()> {
     use std::io::{self, Write};
 
     let mut prompt = InteractivePrompt::new(items.len());
-    
+
     for (index, item) in items.iter().enumerate() {
         prompt.current_index = index + 1;
-        
-        // Display file information
-        println!("\n{}", "=".repeat(60));
-        println!("File {} of {}:", prompt.current_index, prompt.total_files);
-        println!("  Path: {}", item.path.display());
-        println!("  Size: {}", format_size(item.size, BINARY));
-        
+
+        // Display file information in a cleaner format
+        println!("\n{}", "============================================================".cyan());
+        println!("{}", format!("File {} of {}:", prompt.current_index, prompt.total_files).bold());
+        println!("  {}: {}", "Path".bold(), item.path.display());
+        println!("  {}: {}", "Size".bold(), format_size(item.size, BINARY).green());
+        println!("  {}: {}", "Category".bold(), item.category);
+        println!("  {}: {}", "Risk Level".bold(),
+                 match item.risk_level {
+                     RiskLevel::Safe => format!("{}", item.risk_level).green(),
+                     RiskLevel::Moderate => format!("{}", item.risk_level).yellow(),
+                     RiskLevel::Risky => format!("{}", item.risk_level).red(),
+                 });
+
         // Get modification time
         if let Ok(metadata) = std::fs::metadata(&item.path) {
             if let Ok(modified) = metadata.modified() {
-                println!("  Modified: {}", format_system_time(modified));
+                println!("  {}: {}", "Modified".bold(), format_system_time(modified));
             }
         }
-        
-        println!("{}", "=".repeat(60));
-        
+
+        println!("{}", "============================================================".cyan());
+
         // Prompt for action
         loop {
-            print!("\nDelete this file? [d]elete / [s]kip / [q]uit: ");
+            print!("\n{}", "Delete this file? ".cyan());
+            print!("{}", "[d]".green());
+            print!("elete / ");
+            print!("{}", "[s]".yellow());
+            print!("kip / ");
+            print!("{}", "[q]".red());
+            print!("uit: ");
             io::stdout().flush()?;
-            
+
             let mut input = String::new();
             io::stdin().read_line(&mut input)?;
             let choice = input.trim().to_lowercase();
-            
+
             match choice.as_str() {
                 "d" | "delete" => {
                     if dry_run {
                         println!("{}", "[DRY RUN] Would delete this file".yellow());
                         prompt.deleted_count += 1;
                     } else {
-                        match std::fs::remove_file(&item.path) {
+                        // Handle both files and directories
+                        let result = if item.path.is_dir() {
+                            std::fs::remove_dir_all(&item.path)
+                        } else {
+                            std::fs::remove_file(&item.path)
+                        };
+
+                        match result {
                             Ok(_) => {
                                 println!("{}", format!("✓ Deleted: {}", item.path.display()).green());
                                 prompt.deleted_count += 1;
+                                deleted_paths.push(item.path.clone());
                             }
                             Err(e) => {
                                 eprintln!("{}", format!("✗ Failed to delete: {}", e).red());
@@ -325,7 +410,7 @@ pub fn run_interactive_large_file_deletion(
             }
         }
     }
-    
+
     prompt.display_summary();
     Ok(())
 }

@@ -99,3 +99,43 @@ pub fn get_cache_age() -> Result<Option<u64>> {
     let age = current_time.saturating_sub(cached.timestamp);
     Ok(Some(age))
 }
+
+/// Update cache by removing deleted items
+pub fn update_cache_after_deletion(deleted_paths: &[PathBuf]) -> Result<()> {
+    use crate::types::CleanableItem;
+
+    let cache_path = get_cache_path()?;
+
+    if !cache_path.exists() {
+        // No cache to update
+        return Ok(());
+    }
+
+    let contents = fs::read_to_string(&cache_path)?;
+    let mut cached: CachedScan = serde_json::from_str(&contents)?;
+
+    // Remove deleted items from cache
+    let original_count = cached.results.items.len();
+    cached.results.items.retain(|item: &CleanableItem| {
+        !deleted_paths.iter().any(|deleted_path| deleted_path == &item.path)
+    });
+
+    let removed_count = original_count - cached.results.items.len();
+
+    // Recalculate total size
+    cached.results.total_size = cached.results.items.iter().map(|item| item.size).sum();
+
+    // Update timestamp
+    cached.timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+
+    // Save updated cache
+    let json = serde_json::to_string_pretty(&cached)?;
+    fs::write(&cache_path, json)
+        .with_context(|| format!("Failed to update cache at {:?}", cache_path))?;
+
+    if removed_count > 0 {
+        println!("Cache updated: removed {} deleted items", removed_count);
+    }
+
+    Ok(())
+}

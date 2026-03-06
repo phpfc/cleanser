@@ -119,6 +119,7 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
     let mut cleaned_size = 0u64;
     let mut cleaned_count = 0usize;
     let mut failed_count = 0usize;
+    let mut deleted_paths: Vec<PathBuf> = Vec::new();
 
     let pb = ProgressBar::new(items_to_clean.len() as u64);
     pb.set_style(
@@ -139,6 +140,7 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
             Ok(size) => {
                 cleaned_size += size;
                 cleaned_count += 1;
+                deleted_paths.push(item.path.clone());
                 pb.println(format!("{} Cleaned: {}", "✓".green(), item.path.display().to_string().dimmed()));
             }
             Err(e) => {
@@ -163,6 +165,16 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
         "Space freed: {}",
         format_size(cleaned_size, BINARY).green().bold()
     );
+
+    // Update cache to remove deleted items
+    if !deleted_paths.is_empty() && !force_scan {
+        if let Err(e) = cache::update_cache_after_deletion(&deleted_paths) {
+            eprintln!(
+                "{}",
+                format!("Warning: Failed to update cache: {}", e).yellow()
+            );
+        }
+    }
 
     Ok(())
 }

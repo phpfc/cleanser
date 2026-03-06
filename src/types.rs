@@ -471,23 +471,50 @@ pub struct FileItem {
     pub selected: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortMode {
+    SizeDesc,      // Heaviest first (default)
+    SizeAsc,       // Lightest first
+    DateOldest,    // Oldest first
+    DateNewest,    // Newest first
+    PathAsc,       // Path A-Z
+    PathDesc,      // Path Z-A
+}
+
+impl std::fmt::Display for SortMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SortMode::SizeDesc => write!(f, "Size ↓ (Heaviest first)"),
+            SortMode::SizeAsc => write!(f, "Size ↑ (Lightest first)"),
+            SortMode::DateOldest => write!(f, "Date ↑ (Oldest first)"),
+            SortMode::DateNewest => write!(f, "Date ↓ (Newest first)"),
+            SortMode::PathAsc => write!(f, "Path ↑ (A-Z)"),
+            SortMode::PathDesc => write!(f, "Path ↓ (Z-A)"),
+        }
+    }
+}
+
 pub struct TuiState {
     pub items: Vec<FileItem>,
     pub cursor_position: usize,
     pub scroll_offset: usize,
     pub selected_count: usize,
     pub total_selected_size: u64,
+    pub sort_mode: SortMode,
 }
 
 impl TuiState {
-    pub fn new(items: Vec<FileItem>) -> Self {
+    pub fn new(mut items: Vec<FileItem>) -> Self {
+        // Sort by size descending by default
+        items.sort_by(|a, b| b.size.cmp(&a.size));
+
         Self {
             items,
             cursor_position: 0,
             scroll_offset: 0,
             selected_count: 0,
             total_selected_size: 0,
+            sort_mode: SortMode::SizeDesc,
         }
     }
 
@@ -519,6 +546,50 @@ impl TuiState {
     pub fn get_selected_items(&self) -> Vec<&FileItem> {
         self.items.iter().filter(|item| item.selected).collect()
     }
+
+    pub fn set_sort_mode(&mut self, mode: SortMode) {
+        self.sort_mode = mode;
+        self.sort_items();
+    }
+
+    pub fn cycle_sort_mode(&mut self) {
+        self.sort_mode = match self.sort_mode {
+            SortMode::SizeDesc => SortMode::SizeAsc,
+            SortMode::SizeAsc => SortMode::DateOldest,
+            SortMode::DateOldest => SortMode::DateNewest,
+            SortMode::DateNewest => SortMode::PathAsc,
+            SortMode::PathAsc => SortMode::PathDesc,
+            SortMode::PathDesc => SortMode::SizeDesc,
+        };
+        self.sort_items();
+    }
+
+    fn sort_items(&mut self) {
+        match self.sort_mode {
+            SortMode::SizeDesc => {
+                self.items.sort_by(|a, b| b.size.cmp(&a.size));
+            }
+            SortMode::SizeAsc => {
+                self.items.sort_by(|a, b| a.size.cmp(&b.size));
+            }
+            SortMode::DateOldest => {
+                self.items.sort_by(|a, b| a.modified.cmp(&b.modified));
+            }
+            SortMode::DateNewest => {
+                self.items.sort_by(|a, b| b.modified.cmp(&a.modified));
+            }
+            SortMode::PathAsc => {
+                self.items.sort_by(|a, b| a.path.cmp(&b.path));
+            }
+            SortMode::PathDesc => {
+                self.items.sort_by(|a, b| b.path.cmp(&a.path));
+            }
+        }
+
+        // Reset cursor to top after sorting
+        self.cursor_position = 0;
+        self.scroll_offset = 0;
+    }
 }
 
 // ===== Interactive Prompt =====
@@ -542,10 +613,12 @@ impl InteractivePrompt {
     }
 
     pub fn display_summary(&self) {
-        println!("\n=== Interactive Deletion Summary ===");
+        use colored::Colorize;
+
+        println!("\n{}", "=== Interactive Deletion Summary ===".cyan().bold());
         println!("Total files processed: {}", self.current_index);
-        println!("Files deleted: {}", self.deleted_count);
-        println!("Files skipped: {}", self.skipped_count);
+        println!("{}: {}", "Files deleted".green(), self.deleted_count);
+        println!("{}: {}", "Files skipped".yellow(), self.skipped_count);
     }
 }
 

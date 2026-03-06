@@ -249,20 +249,22 @@ fn main() -> anyhow::Result<()> {
             // If interactive mode, launch TUI
             if interactive {
                 let selected_items = tui::run_interactive_mode(&results)?;
-                
+
                 if selected_items.is_empty() {
                     println!("No items selected for deletion");
                 } else {
                     println!("\n{}", format!("Deleting {} selected items...", selected_items.len()).cyan());
-                    
+
                     let mut deleted_count = 0;
                     let mut failed_count = 0;
-                    
+                    let mut deleted_paths: Vec<PathBuf> = Vec::new();
+
                     for item in &selected_items {
                         match std::fs::remove_dir_all(&item.path).or_else(|_| std::fs::remove_file(&item.path)) {
                             Ok(_) => {
                                 println!("{}", format!("✓ Deleted: {}", item.path.display()).green());
                                 deleted_count += 1;
+                                deleted_paths.push(item.path.clone());
                             }
                             Err(e) => {
                                 eprintln!("{}", format!("✗ Failed to delete {}: {}", item.path.display(), e).red());
@@ -270,12 +272,22 @@ fn main() -> anyhow::Result<()> {
                             }
                         }
                     }
-                    
+
                     println!("\n=== Deletion Summary ===");
                     println!("Deleted: {} items", deleted_count);
                     println!("Failed: {} items", failed_count);
+
+                    // Update cache to remove deleted items
+                    if !deleted_paths.is_empty() && !no_cache {
+                        if let Err(e) = cache::update_cache_after_deletion(&deleted_paths) {
+                            eprintln!(
+                                "{}",
+                                format!("Warning: Failed to update cache: {}", e).yellow()
+                            );
+                        }
+                    }
                 }
-                
+
                 return Ok(());
             }
 
@@ -301,36 +313,250 @@ fn main() -> anyhow::Result<()> {
                 format!("Cleaning with maximum risk level: {}", risk).cyan()
             );
 
-            // If interactive mode, handle large files interactively
+            // If interactive mode, handle files interactively based on risk level
             if interactive {
-                // Run a scan to get large files
-                let config = types::ScanConfig {
-                    speed: types::ScanSpeed::Normal,
-                    paths: vec![PathBuf::from(std::env::var("HOME")?)],
-                    min_file_size_mb: 100, // Only scan for large files
-                    max_depth: Some(6),
-                    find_duplicates: false,
-                    ignore_patterns: types::IgnoreList::new(),
-                    size_range: None,
-                    age_criteria: None,
-                    interactive_mode: false,
+                // Try to load from cache first, unless force_scan is specified
+                let results = if !force_scan {
+                    match cache::load_scan_results(None) {
+                        Ok(Some(cached_results)) => {
+                            if let Ok(Some(age)) = cache::get_cache_age() {
+                                let mins = age / 60;
+                                let secs = age % 60;
+                                if mins > 0 {
+                                    println!(
+                                        "{}",
+                                        format!(
+                                            "Using cached scan results from {} min {} sec ago",
+                                            mins, secs
+                                        )
+                                        .cyan()
+                                    );
+                                } else {
+                                    println!(
+                                        "{}",
+                                        format!("Using cached scan results from {} seconds ago", secs).cyan()
+                                    );
+                                }
+                                println!("{}", "Tip: Use --force-scan to run a fresh scan".dimmed());
+                            }
+                            cached_results
+                        }
+                        Ok(None) => {
+                            println!("{}", "No cached scan found, running fresh scan...".cyan());
+
+                            // Load whitelist
+                            let mut ignore_patterns = types::IgnoreList::new();
+                            match types::WhitelistConfig::load() {
+                                Ok(whitelist) => {
+                                    for path in whitelist.list_paths() {
+                                        if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                                            eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                                }
+                            }
+
+                            let config = types::ScanConfig {
+                                speed: types::ScanSpeed::Normal,
+                                paths: vec![PathBuf::from(std::env::var("HOME")?)],
+                                min_file_size_mb: 100,
+                                max_depth: Some(6),
+                                find_duplicates: false,
+                                ignore_patterns,
+                                size_range: None,
+                                age_criteria: None,
+                                interactive_mode: false,
+                            };
+
+                            let scan_results = scanner::scan(config)?;
+
+                            // Save to cache
+                            if let Err(e) = cache::save_scan_results(&scan_results) {
+                                eprintln!(
+                                    "{}",
+                                    format!("Warning: Failed to save scan cache: {}", e).yellow()
+                                );
+                            }
+
+                            scan_results
+                        }
+                        Err(e) => {
+                            println!(
+                                "{}",
+                                format!("Failed to load cache ({}), running fresh scan...", e).yellow()
+                            );
+
+                            // Load whitelist
+                            let mut ignore_patterns = types::IgnoreList::new();
+                            match types::WhitelistConfig::load() {
+                                Ok(whitelist) => {
+                                    for path in whitelist.list_paths() {
+                                        if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                                            eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                                }
+                            }
+
+                            let config = types::ScanConfig {
+                                speed: types::ScanSpeed::Normal,
+                                paths: vec![PathBuf::from(std::env::var("HOME")?)],
+                                min_file_size_mb: 100,
+                                max_depth: Some(6),
+                                find_duplicates: false,
+                                ignore_patterns,
+                                size_range: None,
+                                age_criteria: None,
+                                interactive_mode: false,
+                            };
+
+                            let scan_results = scanner::scan(config)?;
+
+                            // Save to cache
+                            if let Err(e) = cache::save_scan_results(&scan_results) {
+                                eprintln!(
+                                    "{}",
+                                    format!("Warning: Failed to save scan cache: {}", e).yellow()
+                                );
+                            }
+
+                            scan_results
+                        }
+                    }
+                } else {
+                    println!("{}", "Running fresh scan (--force-scan)...".cyan());
+
+                    // Load whitelist
+                    let mut ignore_patterns = types::IgnoreList::new();
+                    match types::WhitelistConfig::load() {
+                        Ok(whitelist) => {
+                            for path in whitelist.list_paths() {
+                                if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                                    eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                        }
+                    }
+
+                    let config = types::ScanConfig {
+                        speed: types::ScanSpeed::Normal,
+                        paths: vec![PathBuf::from(std::env::var("HOME")?)],
+                        min_file_size_mb: 100,
+                        max_depth: Some(6),
+                        find_duplicates: false,
+                        ignore_patterns,
+                        size_range: None,
+                        age_criteria: None,
+                        interactive_mode: false,
+                    };
+
+                    let scan_results = scanner::scan(config)?;
+
+                    // Save to cache
+                    if let Err(e) = cache::save_scan_results(&scan_results) {
+                        eprintln!(
+                            "{}",
+                            format!("Warning: Failed to save scan cache: {}", e).yellow()
+                        );
+                    }
+
+                    scan_results
                 };
 
-                let results = scanner::scan(config)?;
-                
-                // Filter for large files only
-                let large_files: Vec<_> = results.items.iter()
-                    .filter(|item| item.category == types::CleanCategory::LargeFiles)
+                // Filter items based on risk level
+                let filtered_items: Vec<_> = results.items.iter()
+                    .filter(|item| {
+                        match risk {
+                            types::RiskLevel::Safe => item.risk_level == types::RiskLevel::Safe,
+                            types::RiskLevel::Moderate => {
+                                item.risk_level == types::RiskLevel::Safe ||
+                                item.risk_level == types::RiskLevel::Moderate
+                            },
+                            types::RiskLevel::Risky => true, // All risk levels
+                        }
+                    })
                     .cloned()
                     .collect();
 
-                if large_files.is_empty() {
-                    println!("No large files found");
+                if filtered_items.is_empty() {
+                    println!("No files found matching the specified risk level");
                     return Ok(());
                 }
 
-                println!("\nFound {} large files", large_files.len());
-                tui::run_interactive_large_file_deletion(&large_files, dry_run)?;
+                println!("\nFound {} files matching risk level: {}", filtered_items.len(), risk);
+
+                // Create a ScanResults with filtered items for the TUI
+                let filtered_results = types::ScanResults {
+                    items: filtered_items,
+                    total_size: 0, // Will be calculated by TUI
+                    scan_speed: types::ScanSpeed::Normal,
+                    excluded_dirs_count: 0,
+                    filtered_by_size_count: 0,
+                    filtered_by_age_count: 0,
+                };
+
+                // Use the full TUI interface
+                let selected_items = tui::run_interactive_mode(&filtered_results)?;
+
+                if selected_items.is_empty() {
+                    println!("No items selected for deletion");
+                } else {
+                    if dry_run {
+                        println!("\n{}", "DRY RUN MODE - No files will be deleted".yellow());
+                        println!("Would delete {} selected items", selected_items.len());
+                        return Ok(());
+                    }
+
+                    println!("\n{}", format!("Deleting {} selected items...", selected_items.len()).cyan());
+
+                    let mut deleted_count = 0;
+                    let mut failed_count = 0;
+                    let mut deleted_paths: Vec<PathBuf> = Vec::new();
+
+                    for item in &selected_items {
+                        let result = if item.path.is_dir() {
+                            std::fs::remove_dir_all(&item.path)
+                        } else {
+                            std::fs::remove_file(&item.path)
+                        };
+
+                        match result {
+                            Ok(_) => {
+                                println!("{}", format!("✓ Deleted: {}", item.path.display()).green());
+                                deleted_count += 1;
+                                deleted_paths.push(item.path.clone());
+                            }
+                            Err(e) => {
+                                eprintln!("{}", format!("✗ Failed to delete {}: {}", item.path.display(), e).red());
+                                failed_count += 1;
+                            }
+                        }
+                    }
+
+                    println!("\n=== Deletion Summary ===");
+                    println!("{}: {}", "Deleted".green(), deleted_count);
+                    println!("{}: {}", "Failed".red(), failed_count);
+
+                    // Update cache to remove deleted items
+                    if !deleted_paths.is_empty() {
+                        if let Err(e) = cache::update_cache_after_deletion(&deleted_paths) {
+                            eprintln!(
+                                "{}",
+                                format!("Warning: Failed to update cache: {}", e).yellow()
+                            );
+                        }
+                    }
+                }
+
                 return Ok(());
             }
 

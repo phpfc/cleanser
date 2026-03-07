@@ -3,7 +3,6 @@ mod cleaner;
 mod mapper;
 mod platform;
 mod scanner;
-mod scanner_v2;
 mod tui;
 mod types;
 
@@ -167,46 +166,77 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
         MapAction::Show => {
             match FileSystemMap::load() {
                 Ok(map) => {
-                    println!("{}", "Filesystem Map:".cyan().bold());
-                    println!("Version: {}", map.version);
-                    println!("Total directories: {}", map.total_directories);
+                    // Header
+                    println!();
+                    println!("  {}", "╔════════════════════════════════════════════════════════════╗".cyan());
+                    println!("  {}  {:<56}  {}", "║".cyan(), "FILESYSTEM MAP".cyan().bold(), "║".cyan());
+                    println!("  {}", "╚════════════════════════════════════════════════════════════╝".cyan());
+                    println!();
+
+                    // Summary stats
+                    let cleanable_count = map.directories.values()
+                        .filter(|d| matches!(d.category, DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact))
+                        .count();
+
+                    println!("  {} {}", "Total mapped:".dimmed(), format!("{} directories", map.total_directories));
+                    println!("  {} {}",
+                        "Cleanable:".green().bold(),
+                        format!("{} directories", cleanable_count).green()
+                    );
 
                     let created = chrono::DateTime::from_timestamp(map.created_at as i64, 0)
                         .unwrap_or_default();
-                    let updated = chrono::DateTime::from_timestamp(map.last_updated as i64, 0)
-                        .unwrap_or_default();
-
-                    println!("Created: {}", created.format("%Y-%m-%d %H:%M:%S"));
-                    println!("Last updated: {}", updated.format("%Y-%m-%d %H:%M:%S"));
+                    println!("  {} {}", "Last scan:".dimmed(), created.format("%Y-%m-%d %H:%M"));
 
                     if map.is_stale() {
-                        println!("{}", "⚠ Map is stale (>7 days old). Consider rebuilding.".yellow());
+                        println!();
+                        println!("  {}", "⚠ Map is stale (>7 days). Run: cleanser map rebuild".yellow());
                     }
 
-                    println!("\n{}", "By Category:".cyan());
-                    let stats = map.stats_by_category();
-                    for (category, (count, size)) in stats {
-                        println!("  {:?}: {} directories, {}", category, count, format_size(size, BINARY));
+                    // Cleanable by category
+                    println!();
+                    println!("  {}", "─── Cleanable Categories ──────────────────────────────────".cyan());
+                    println!();
+
+                    let mut tag_counts: Vec<_> = map.stats_by_tag()
+                        .into_iter()
+                        .collect();
+                    tag_counts.sort_by(|a, b| b.1.0.cmp(&a.1.0)); // Sort by count
+
+                    let max_count = tag_counts.first().map(|(_, (c, _))| *c).unwrap_or(1);
+
+                    for (tag, (count, _)) in tag_counts.iter().take(10) {
+                        let bar_width = ((*count * 30) / max_count).max(1);
+                        let bar = "█".repeat(bar_width);
+
+                        println!("  {:>14}  {:>5} dirs  {}",
+                            tag.yellow(),
+                            count,
+                            bar.green()
+                        );
                     }
 
-                    println!("\n{}", "Top Tags:".cyan());
-                    let tag_stats = map.stats_by_tag();
-                    let mut tag_vec: Vec<_> = tag_stats.iter().collect();
-                    tag_vec.sort_by(|a, b| b.1.1.cmp(&a.1.1)); // Sort by size
-                    for (tag, (count, size)) in tag_vec.iter().take(10) {
-                        println!("  {}: {} dirs, {}", tag, count, format_size(*size, BINARY));
-                    }
-
-                    println!("\nTotal mapped size: {}", format_size(map.total_size(), BINARY));
+                    println!();
+                    println!("  {}", "─── Quick Actions ─────────────────────────────────────────".cyan());
+                    println!();
+                    println!("  {} cleanser scan              {}", "→".green(), "Scan and calculate sizes".dimmed());
+                    println!("  {} cleanser map stats         {}", "→".green(), "View detailed breakdown".dimmed());
+                    println!("  {} cleanser map rebuild       {}", "→".green(), "Refresh the map".dimmed());
+                    println!();
                 }
-                Err(e) => {
-                    println!("{}", format!("No filesystem map found: {}", e).yellow());
-                    println!("{}", "Run 'cleanser map rebuild' to create one.".cyan());
+                Err(_) => {
+                    println!();
+                    println!("  {}", "No filesystem map found.".yellow());
+                    println!();
+                    println!("  Create one with: {}", "cleanser map rebuild".cyan());
+                    println!();
                 }
             }
         }
         MapAction::Rebuild { max_depth, min_confidence } => {
-            println!("{}", "Rebuilding filesystem map...".cyan());
+            println!();
+            println!("  {}", "Rebuilding filesystem map...".cyan());
+            println!();
 
             let crawler = FileSystemCrawler::new()
                 .with_max_depth(max_depth)
@@ -216,73 +246,140 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
             let map = crawler.crawl_full()?;
             map.save()?;
 
-            println!("{}", "Filesystem map rebuilt successfully!".green());
-            println!("Total directories mapped: {}", map.total_directories);
-            println!("Total size: {}", format_size(map.total_size(), BINARY));
+            let cleanable_count = map.directories.values()
+                .filter(|d| matches!(d.category, DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact))
+                .count();
+
+            println!();
+            println!("  {}", "✓ Filesystem map rebuilt!".green().bold());
+            println!();
+            println!("  {} {}", "Directories mapped:".dimmed(), map.total_directories);
+            println!("  {} {}", "Cleanable directories:".green(), format!("{}", cleanable_count).green().bold());
+            println!();
+            println!("  {}", "Run 'cleanser scan --use-map' to analyze sizes.".dimmed());
+            println!();
         }
         MapAction::Stats => {
             match FileSystemMap::load() {
                 Ok(map) => {
-                    println!("{}", "Filesystem Map Statistics:".cyan().bold());
-                    println!("\n{}", "By Category:".cyan());
+                    println!();
+                    println!("  {}", "╔════════════════════════════════════════════════════════════╗".cyan());
+                    println!("  {}  {:<56}  {}", "║".cyan(), "DETAILED STATISTICS".cyan().bold(), "║".cyan());
+                    println!("  {}", "╚════════════════════════════════════════════════════════════╝".cyan());
+                    println!();
 
+                    // By Category with visual bars
+                    println!("  {}", "─── By Category ───────────────────────────────────────────".cyan());
+                    println!();
+
+                    // By Category
                     let stats = map.stats_by_category();
                     let mut stats_vec: Vec<_> = stats.iter().collect();
-                    stats_vec.sort_by(|a, b| b.1.1.cmp(&a.1.1)); // Sort by size
+                    stats_vec.sort_by(|a, b| b.1.0.cmp(&a.1.0)); // Sort by count
+                    let max_count = stats_vec.first().map(|(_, (c, _))| *c).unwrap_or(1);
 
-                    for (category, (count, size)) in stats_vec {
-                        println!("  {:20} {:>6} dirs  {:>12}",
-                            format!("{:?}", category),
+                    for (category, (count, _)) in &stats_vec {
+                        let cat_name = match category {
+                            DirectoryCategory::Ephemeral => "Cache/Temp",
+                            DirectoryCategory::BuildArtifact => "Build Artifacts",
+                            DirectoryCategory::ApplicationData => "App Data",
+                            DirectoryCategory::UserContent => "User Content",
+                            DirectoryCategory::System => "System",
+                            DirectoryCategory::Unknown => "Other",
+                        };
+                        let bar_width = ((*count * 25) / max_count).max(1);
+                        let bar = "█".repeat(bar_width);
+
+                        let (cat_color, bar_color): (fn(&str) -> colored::ColoredString, fn(&str) -> colored::ColoredString) = match category {
+                            DirectoryCategory::Ephemeral => (|s| s.green(), |s| s.green()),
+                            DirectoryCategory::BuildArtifact => (|s| s.yellow(), |s| s.yellow()),
+                            DirectoryCategory::UserContent => (|s| s.blue(), |s| s.blue()),
+                            _ => (|s| s.white(), |s| s.white()),
+                        };
+
+                        println!("  {:>16}  {:>6} dirs  {}",
+                            cat_color(cat_name),
                             count,
-                            format_size(*size, BINARY)
+                            bar_color(&bar)
                         );
                     }
 
-                    println!("\n{}", "By Tag (Top 20):".cyan());
+                    // By Tag
+                    println!();
+                    println!("  {}", "─── By Type (Top 15) ──────────────────────────────────────".cyan());
+                    println!();
+
                     let tag_stats = map.stats_by_tag();
                     let mut tag_vec: Vec<_> = tag_stats.iter().collect();
-                    tag_vec.sort_by(|a, b| b.1.1.cmp(&a.1.1));
+                    tag_vec.sort_by(|a, b| b.1.0.cmp(&a.1.0)); // Sort by count
 
-                    for (tag, (count, size)) in tag_vec.iter().take(20) {
-                        println!("  {:20} {:>6} dirs  {:>12}",
-                            tag,
-                            count,
-                            format_size(*size, BINARY)
+                    for (tag, (count, _)) in tag_vec.iter().take(15) {
+                        println!("  {:>16}  {:>6} dirs",
+                            tag.yellow(),
+                            count
                         );
                     }
 
-                    println!("\n{}", "By Confidence Level:".cyan());
-                    let high_conf = map.get_by_confidence(0.9);
-                    let med_conf = map.get_by_confidence(0.7)
-                        .iter()
-                        .filter(|d| d.confidence < 0.9)
-                        .count();
-                    let low_conf = map.directories.values()
-                        .filter(|d| d.confidence < 0.7)
-                        .count();
+                    // Confidence breakdown
+                    println!();
+                    println!("  {}", "─── Classification Confidence ─────────────────────────────".cyan());
+                    println!();
 
-                    println!("  High (≥0.9): {} directories", high_conf.len());
-                    println!("  Med (0.7-0.9): {} directories", med_conf);
-                    println!("  Low (<0.7): {} directories", low_conf);
+                    let high_conf = map.directories.values().filter(|d| d.confidence >= 0.9).count();
+                    let med_conf = map.directories.values().filter(|d| d.confidence >= 0.7 && d.confidence < 0.9).count();
+                    let low_conf = map.directories.values().filter(|d| d.confidence < 0.7).count();
+                    let total = map.directories.len();
 
-                    println!("\n{}", "Top 10 Largest Directories:".cyan());
-                    let mut dirs: Vec<_> = map.directories.values().collect();
-                    dirs.sort_by(|a, b| b.estimated_size.cmp(&a.estimated_size));
+                    println!("  {:>16}  {} {}",
+                        "High (≥90%)".green(),
+                        format!("{:>5}", high_conf).green(),
+                        format!("({}%)", high_conf * 100 / total.max(1)).dimmed()
+                    );
+                    println!("  {:>16}  {} {}",
+                        "Medium (70-90%)".yellow(),
+                        format!("{:>5}", med_conf).yellow(),
+                        format!("({}%)", med_conf * 100 / total.max(1)).dimmed()
+                    );
+                    println!("  {:>16}  {} {}",
+                        "Low (<70%)".red(),
+                        format!("{:>5}", low_conf).red(),
+                        format!("({}%)", low_conf * 100 / total.max(1)).dimmed()
+                    );
 
-                    for (i, dir) in dirs.iter().take(10).enumerate() {
-                        let tags_str = if !dir.tags.is_empty() {
-                            format!(" [{}]", dir.tags.join(", "))
-                        } else {
-                            String::new()
-                        };
-                        println!("  {}. {}{} - {} ({:.1}% confidence)",
-                            i + 1,
-                            dir.path.display(),
-                            tags_str,
-                            format_size(dir.estimated_size, BINARY),
-                            dir.confidence * 100.0
-                        );
+                    // Sample cleanable paths
+                    println!();
+                    println!("  {}", "─── Sample Cleanable Paths ────────────────────────────────".cyan());
+                    println!();
+
+                    let cleanable: Vec<_> = map.directories.values()
+                        .filter(|d| matches!(d.category, DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact))
+                        .filter(|d| d.confidence >= 0.8)
+                        .take(8)
+                        .collect();
+
+                    if cleanable.is_empty() {
+                        println!("  {}", "No high-confidence cleanable directories found.".dimmed());
+                    } else {
+                        for dir in cleanable {
+                            let path_str = dir.path.to_string_lossy();
+                            let display_path = if path_str.len() > 55 {
+                                format!("...{}", &path_str[path_str.len() - 52..])
+                            } else {
+                                path_str.to_string()
+                            };
+
+                            let tag = dir.tags.first().map(|s| s.as_str()).unwrap_or("");
+                            println!("  {} {:55} {}",
+                                "•".green(),
+                                display_path,
+                                format!("[{}]", tag).dimmed()
+                            );
+                        }
                     }
+
+                    println!();
+                    println!("  {}", "Run 'cleanser scan' to calculate sizes.".dimmed());
+                    println!();
                 }
                 Err(e) => {
                     println!("{}", format!("No filesystem map found: {}", e).yellow());
@@ -293,7 +390,8 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
         MapAction::Verify => {
             match FileSystemMap::load() {
                 Ok(mut map) => {
-                    println!("{}", "Verifying filesystem map...".cyan());
+                    println!();
+                    println!("  {}", "Verifying filesystem map...".cyan());
 
                     let total_dirs = map.directories.len();
                     let invalid: Vec<_> = map.directories.iter()
@@ -302,22 +400,20 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                         .collect();
 
                     if invalid.is_empty() {
-                        println!("{}", "✓ All directories in the map still exist.".green());
+                        println!("  {}", "✓ All directories still exist.".green());
                     } else {
-                        println!("{}", format!("Found {} invalid entries:", invalid.len()).yellow());
-                        for path in &invalid {
-                            println!("  - {}", path.display());
-                        }
+                        println!("  {} {} invalid entries", "Found".yellow(), invalid.len());
 
-                        println!("\nCleaning up invalid entries...");
                         map.cleanup_invalid();
                         map.save()?;
 
-                        println!("{}", format!("Removed {} invalid entries. {} remain.",
+                        println!("  {} Removed {} entries, {} remain.",
+                            "✓".green(),
                             invalid.len(),
                             total_dirs - invalid.len()
-                        ).green());
+                        );
                     }
+                    println!();
                 }
                 Err(e) => {
                     println!("{}", format!("No filesystem map found: {}", e).yellow());
@@ -327,13 +423,12 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
         MapAction::Suggest => {
             match FileSystemMap::load() {
                 Ok(map) => {
-                    println!("{}", "Suggested Whitelist Entries:".cyan().bold());
-                    println!("{}", "(Based on high-confidence, low-risk directories)\n".dimmed());
+                    println!();
+                    println!("  {}", "─── Whitelist Suggestions ─────────────────────────────────".cyan());
+                    println!();
 
-                    // Load current whitelist
                     let whitelist = types::WhitelistConfig::load()?;
 
-                    // Find directories that should be whitelisted
                     let suggestions: Vec<_> = map.directories.values()
                         .filter(|d| {
                             d.confidence >= 0.95 &&
@@ -343,28 +438,21 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                         .collect();
 
                     if suggestions.is_empty() {
-                        println!("{}", "No suggestions found.".green());
-                        println!("Your current whitelist seems comprehensive!");
+                        println!("  {}", "No suggestions - your whitelist looks comprehensive!".green());
                     } else {
-                        println!("Found {} recommended whitelist additions:\n", suggestions.len());
+                        println!("  Found {} directories that should probably be protected:\n", suggestions.len());
 
-                        for (i, dir) in suggestions.iter().enumerate() {
-                            println!("{}. {}", i + 1, dir.path.display());
-                            println!("   Category: {:?}, Tags: [{}], Confidence: {:.1}%",
-                                dir.category,
-                                dir.tags.join(", "),
-                                dir.confidence * 100.0
-                            );
-                            println!();
+                        for dir in suggestions.iter().take(10) {
+                            println!("  {} {}", "→".yellow(), dir.path.display());
                         }
 
-                        println!("{}", "To add these to your whitelist, use:".cyan());
-                        println!("  cleanser whitelist add <path>");
+                        println!();
+                        println!("  Add with: {}", "cleanser whitelist add <path>".cyan());
                     }
+                    println!();
                 }
                 Err(e) => {
                     println!("{}", format!("No filesystem map found: {}", e).yellow());
-                    println!("{}", "Run 'cleanser map rebuild' to create one.".cyan());
                 }
             }
         }

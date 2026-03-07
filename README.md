@@ -1,9 +1,15 @@
+<p align="center">
+  <img src="icon.png" alt="Cleanser mascot" width="200">
+</p>
+
 # Cleanser
 
 [![CI](https://github.com/phpfc/cleanser/actions/workflows/ci.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/ci.yml)
 [![Release](https://github.com/phpfc/cleanser/actions/workflows/release.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/release.yml)
 
-A blazing-fast CLI tool for clearing macOS storage space, written in Rust.
+A blazing-fast cross-platform CLI tool for clearing storage space, written in Rust.
+
+**Supports macOS, Linux, and Windows.**
 
 ## Quick Start
 
@@ -22,9 +28,20 @@ cleanser clean --dry-run
 cleanser clean --risk safe
 ```
 
+## Platform Support
+
+| Platform | Status | Cache Locations | Build Artifacts |
+|----------|--------|-----------------|-----------------|
+| macOS    | ✅ Full | `~/Library/Caches`, `~/.cache` | All supported |
+| Linux    | ✅ Full | `~/.cache`, XDG paths | All supported |
+| Windows  | ✅ Full | `%LOCALAPPDATA%`, `%TEMP%` | All supported |
+
+Cleanser automatically detects your OS and scans the appropriate locations for caches, logs, build artifacts, and temporary files.
+
 ## Features
 
-- **Smart Caching**: Scan results are cached (`~/.cache/cleanser/last-scan.json`) so `clean` doesn't re-scan unnecessarily
+- **Cross-Platform**: Works on macOS, Linux, and Windows with OS-specific path detection
+- **Smart Caching**: Scan results are cached so `clean` doesn't re-scan unnecessarily
 - **Dynamic Discovery**: Pattern-based scanning finds cache directories, build artifacts, and logs anywhere in your filesystem
 - **Three scan speeds**: Quick (depth 3), Normal (depth 6), or Thorough (unlimited depth)
 - **Large file detection**: Find files above a configurable size threshold (default 100MB)
@@ -335,7 +352,7 @@ Space freed: 1.6 GB
 
 - **Smart validation**: Build directories are validated against project files (e.g., `target/` must have `Cargo.toml`)
 - **Pattern matching**: Uses regex patterns to identify safe-to-delete directories
-- **Skip system directories**: Automatically skips `/System`, `/Library`, `Applications`, etc.
+- **Skip system directories**: Automatically skips system-critical directories on all platforms
 - **Confirmation prompts**: By default, you'll be asked to confirm before deletion
 - **Dry-run mode**: Test what will be deleted with `--dry-run`
 - **Risk levels**: Control what gets deleted with `--risk` flag
@@ -356,7 +373,7 @@ Cleanser is built with performance in mind:
 ### Prerequisites
 
 - Rust 1.70 or higher
-- macOS (this tool is macOS-specific)
+- macOS, Linux, or Windows
 
 ### Building
 
@@ -402,7 +419,7 @@ MIT
 - [ ] Add scheduled cleanup support (cron integration)
 - [ ] Generate detailed cleanup reports (HTML/PDF)
 - [ ] Add compression detection (find already-compressed files in archives)
-- [ ] Support for other operating systems (Linux, Windows)
+- [x] Cross-platform support (macOS, Linux, Windows)
 - [ ] Config file support (~/.cleanser.toml)
 
 ## Safety Disclaimer

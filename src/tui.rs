@@ -318,6 +318,7 @@ fn format_system_time(time: SystemTime) -> String {
 }
 
 
+#[allow(dead_code)]
 pub fn run_interactive_large_file_deletion(
     items: &[CleanableItem],
     dry_run: bool,

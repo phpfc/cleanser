@@ -132,9 +132,11 @@ pub struct ScanConfig {
     pub ignore_patterns: IgnoreList,
     pub size_range: Option<SizeRange>,
     pub age_criteria: Option<AgeCriteria>,
+    #[allow(dead_code)]
     pub interactive_mode: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FileHash {
     pub hash: String,
@@ -146,6 +148,7 @@ pub struct FileHash {
 #[derive(Debug, Clone)]
 pub struct IgnorePattern {
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub is_absolute: bool,
 }
 
@@ -186,10 +189,12 @@ impl IgnoreList {
         false
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.patterns.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.patterns.is_empty()
     }
@@ -594,6 +599,7 @@ impl TuiState {
 
 // ===== Interactive Prompt =====
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct InteractivePrompt {
     pub current_index: usize,
@@ -622,6 +628,7 @@ impl InteractivePrompt {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserChoice {
     Delete,

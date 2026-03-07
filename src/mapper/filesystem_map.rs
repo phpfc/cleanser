@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fs;
@@ -127,13 +129,22 @@ impl FileSystemMap {
         let map_path = cache_dir.join("filesystem_map.json");
 
         if !map_path.exists() {
-            return Ok(Self::new());
+            anyhow::bail!("Filesystem map not found. Run 'cleanser map rebuild' to create one.");
         }
 
         let contents = fs::read_to_string(&map_path)?;
         let map: FileSystemMap = serde_json::from_str(&contents)?;
 
         Ok(map)
+    }
+
+    /// Check if a saved map exists
+    pub fn exists() -> bool {
+        if let Ok(cache_dir) = paths::get_cache_dir() {
+            cache_dir.join("filesystem_map.json").exists()
+        } else {
+            false
+        }
     }
 
     /// Save map to cache
@@ -247,7 +258,8 @@ mod tests {
         let mut map = FileSystemMap::new();
         let dir = MappedDirectory {
             path: PathBuf::from("/tmp/cache"),
-            dir_type: DirectoryType::Cache,
+            category: DirectoryCategory::Ephemeral,
+            tags: vec!["cache".to_string()],
             estimated_size: 1024,
             file_count: 10,
             last_modified: None,
@@ -259,18 +271,19 @@ mod tests {
     }
 
     #[test]
-    fn test_get_by_type() {
+    fn test_get_by_tag() {
         let mut map = FileSystemMap::new();
         map.add_directory(MappedDirectory {
             path: PathBuf::from("/tmp/cache"),
-            dir_type: DirectoryType::Cache,
+            category: DirectoryCategory::Ephemeral,
+            tags: vec!["cache".to_string()],
             estimated_size: 1024,
             file_count: 10,
             last_modified: None,
             confidence: 0.9,
         });
 
-        let caches = map.get_by_type(DirectoryType::Cache);
+        let caches = map.get_by_tag("cache");
         assert_eq!(caches.len(), 1);
     }
 }

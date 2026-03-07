@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::path::Path;
 use crate::platform::detection::*;
 use super::filesystem_map::{DirectoryCategory, MappedDirectory};
@@ -6,19 +8,22 @@ pub struct PathClassifier;
 
 impl PathClassifier {
     /// Classify a directory and return a MappedDirectory with confidence score
+    /// Note: Does NOT calculate size - that's the scan's responsibility
     pub fn classify(path: &Path) -> Option<MappedDirectory> {
-        // Get directory statistics first
-        let stats = DirStats::analyze(path).ok()?;
-
         // Classify and get category + tags
         let (category, tags, confidence) = Self::classify_directory(path);
+
+        // Skip unclassified directories
+        if matches!(category, DirectoryCategory::Unknown) && confidence < 0.5 {
+            return None;
+        }
 
         Some(MappedDirectory {
             path: path.to_path_buf(),
             category,
             tags,
-            estimated_size: stats.total_size,
-            file_count: stats.file_count,
+            estimated_size: 0, // Size calculated during scan, not mapping
+            file_count: 0,      // Count calculated during scan, not mapping
             last_modified: path
                 .metadata()
                 .ok()

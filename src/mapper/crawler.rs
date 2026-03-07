@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_mut)]
+
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
@@ -6,6 +10,7 @@ use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::platform::{paths, Platform};
+use crate::types::WhitelistConfig;
 use super::filesystem_map::{FileSystemMap, DirectoryCategory};
 use super::heuristics::PathClassifier;
 
@@ -14,15 +19,22 @@ pub struct FileSystemCrawler {
     max_depth: usize,
     min_confidence: f32,
     progress: Option<ProgressBar>,
+    ignored_paths: Vec<PathBuf>,
 }
 
 impl FileSystemCrawler {
     pub fn new() -> Self {
+        // Load whitelist automatically
+        let ignored_paths = WhitelistConfig::load()
+            .map(|w| w.list_paths().into_iter().cloned().collect())
+            .unwrap_or_default();
+
         Self {
             platform: Platform::current(),
             max_depth: 10,
             min_confidence: 0.6,
             progress: None,
+            ignored_paths,
         }
     }
 
@@ -47,6 +59,16 @@ impl FileSystemCrawler {
             self.progress = Some(pb);
         }
         self
+    }
+
+    /// Check if a path should be ignored (is in whitelist)
+    fn is_ignored(&self, path: &Path) -> bool {
+        for ignored in &self.ignored_paths {
+            if path.starts_with(ignored) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Perform initial full filesystem crawl
@@ -116,6 +138,11 @@ impl FileSystemCrawler {
     ) -> Result<()> {
         // Safety limit
         if current_depth > self.max_depth {
+            return Ok(());
+        }
+
+        // Skip whitelisted directories
+        if self.is_ignored(dir) {
             return Ok(());
         }
 

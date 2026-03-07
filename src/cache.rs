@@ -1,3 +1,4 @@
+use crate::platform;
 use crate::types::ScanResults;
 use anyhow::{Context, Result};
 use std::fs;
@@ -16,8 +17,8 @@ pub struct CachedScan {
 
 /// Get the cache file path
 fn get_cache_path() -> Result<PathBuf> {
-    let home = std::env::var("HOME")?;
-    Ok(PathBuf::from(home).join(CACHE_DIR).join(CACHE_FILE))
+    let home = platform::home_dir_or_err()?;
+    Ok(home.join(CACHE_DIR).join(CACHE_FILE))
 }
 
 /// Save scan results to cache

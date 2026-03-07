@@ -1,3 +1,4 @@
+use crate::platform;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashSet;
@@ -166,8 +167,8 @@ impl IgnoreList {
 
     pub fn add_pattern(&mut self, path: &str) -> anyhow::Result<()> {
         let expanded_path = if path.starts_with('~') {
-            let home = std::env::var("HOME")?;
-            PathBuf::from(path.replacen('~', &home, 1))
+            let home = platform::home_dir_or_err()?;
+            PathBuf::from(path.replacen('~', &home.to_string_lossy().as_ref(), 1))
         } else {
             PathBuf::from(path)
         };
@@ -344,12 +345,16 @@ impl WhitelistConfig {
     }
 
     pub fn get_config_path() -> anyhow::Result<PathBuf> {
-        let home = std::env::var("HOME")?;
-        Ok(PathBuf::from(home)
-            .join("Library")
-            .join("Application Support")
-            .join("cleanser")
-            .join("whitelist.json"))
+        let home = platform::home_dir_or_err()?;
+
+        // Use platform-appropriate config directory
+        let config_dir = match platform::Platform::current() {
+            platform::Platform::MacOS => home.join("Library").join("Application Support").join("cleanser"),
+            platform::Platform::Linux => home.join(".config").join("cleanser"),
+            platform::Platform::Windows => home.join("AppData").join("Local").join("cleanser"),
+        };
+
+        Ok(config_dir.join("whitelist.json"))
     }
 
     pub fn load() -> anyhow::Result<Self> {
@@ -363,8 +368,7 @@ impl WhitelistConfig {
         let mut config: WhitelistConfig = serde_json::from_str(&content)?;
 
         // Migrate relative paths to absolute paths
-        let home = std::env::var("HOME")?;
-        let home_path = PathBuf::from(&home);
+        let home_path = platform::home_dir_or_err()?;
 
         let mut normalized_whitelist = HashSet::new();
         let mut needs_save = false;
@@ -437,8 +441,8 @@ impl WhitelistConfig {
             }
             // Also try with home directory
             if !removed {
-                if let Ok(home) = std::env::var("HOME") {
-                    let home_path = PathBuf::from(home).join(path);
+                if let Some(home) = platform::home_dir() {
+                    let home_path = home.join(path);
                     removed = self.whitelist.remove(&home_path);
                 }
             }

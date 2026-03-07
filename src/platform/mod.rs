@@ -3,6 +3,32 @@
 pub mod detection;
 pub mod paths;
 
+use std::path::PathBuf;
+
+/// Get the user's home directory, cross-platform
+pub fn home_dir() -> Option<PathBuf> {
+    // Try dirs crate first (most reliable)
+    if let Some(home) = dirs::home_dir() {
+        return Some(home);
+    }
+
+    // Fallback to env vars
+    if let Ok(home) = std::env::var("HOME") {
+        return Some(PathBuf::from(home));
+    }
+
+    if let Ok(userprofile) = std::env::var("USERPROFILE") {
+        return Some(PathBuf::from(userprofile));
+    }
+
+    None
+}
+
+/// Get the user's home directory or error
+pub fn home_dir_or_err() -> anyhow::Result<PathBuf> {
+    home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
     MacOS,

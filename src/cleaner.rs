@@ -1,5 +1,5 @@
 use crate::types::*;
-use crate::{cache, scanner};
+use crate::{cache, platform, scanner};
 use anyhow::Result;
 use colored::Colorize;
 use humansize::{format_size, BINARY};
@@ -28,7 +28,7 @@ fn run_fresh_scan() -> Result<ScanResults> {
 
     let config = ScanConfig {
         speed: ScanSpeed::Normal,
-        paths: vec![PathBuf::from(std::env::var("HOME")?)],
+        paths: vec![platform::home_dir_or_err()?],
         min_file_size_mb: 0, // Don't scan for large files during clean
         max_depth: Some(6),
         find_duplicates: false, // Don't look for duplicates during clean

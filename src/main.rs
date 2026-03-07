@@ -3,6 +3,7 @@ mod cleaner;
 mod mapper;
 mod platform;
 mod scanner;
+mod setup;
 mod tui;
 mod types;
 
@@ -462,6 +463,11 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Check for first-time setup
+    if setup::is_first_run() {
+        setup::run_first_time_setup()?;
+    }
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -553,7 +559,7 @@ fn main() -> anyhow::Result<()> {
             let config = types::ScanConfig {
                 speed,
                 paths: if paths.is_empty() {
-                    vec![PathBuf::from(std::env::var("HOME")?)]
+                    vec![platform::home_dir_or_err()?]
                 } else {
                     paths.into_iter().map(PathBuf::from).collect()
                 },
@@ -693,7 +699,7 @@ fn main() -> anyhow::Result<()> {
 
                             let config = types::ScanConfig {
                                 speed: types::ScanSpeed::Normal,
-                                paths: vec![PathBuf::from(std::env::var("HOME")?)],
+                                paths: vec![platform::home_dir_or_err()?],
                                 min_file_size_mb: 100,
                                 max_depth: Some(6),
                                 find_duplicates: false,
@@ -738,7 +744,7 @@ fn main() -> anyhow::Result<()> {
 
                             let config = types::ScanConfig {
                                 speed: types::ScanSpeed::Normal,
-                                paths: vec![PathBuf::from(std::env::var("HOME")?)],
+                                paths: vec![platform::home_dir_or_err()?],
                                 min_file_size_mb: 100,
                                 max_depth: Some(6),
                                 find_duplicates: false,
@@ -781,7 +787,7 @@ fn main() -> anyhow::Result<()> {
 
                     let config = types::ScanConfig {
                         speed: types::ScanSpeed::Normal,
-                        paths: vec![PathBuf::from(std::env::var("HOME")?)],
+                        paths: vec![platform::home_dir_or_err()?],
                         min_file_size_mb: 100,
                         max_depth: Some(6),
                         find_duplicates: false,

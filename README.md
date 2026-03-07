@@ -1,433 +1,134 @@
-<p align="center">
-  <img src="icon.png" alt="Cleanser mascot" width="200">
-</p>
-
 # Cleanser
+
+<img src="icon.png" alt="Cleanser" width="120" align="right">
 
 [![CI](https://github.com/phpfc/cleanser/actions/workflows/ci.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/ci.yml)
 [![Release](https://github.com/phpfc/cleanser/actions/workflows/release.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/release.yml)
 
 A blazing-fast cross-platform CLI tool for clearing storage space, written in Rust.
 
-**Supports macOS, Linux, and Windows.**
+**Works on macOS, Linux, and Windows.**
 
 ## Quick Start
 
 ```bash
-# Install
-brew tap phpfc/cleanser
-brew install cleanser
+# Install (macOS)
+brew tap phpfc/cleanser && brew install cleanser
+
+# Or with cargo
+cargo install --git https://github.com/phpfc/cleanser.git
 
 # Scan your system
-cleanser scan --speed normal
+cleanser scan
 
-# Clean safe items (with preview)
+# Preview what would be deleted
 cleanser clean --dry-run
 
-# Actually clean
+# Clean safe items
 cleanser clean --risk safe
 ```
+
+## Commands
+
+### `scan` - Find cleanable files
+
+```bash
+cleanser scan                      # Normal scan
+cleanser scan --speed quick        # Fast scan (depth 3)
+cleanser scan --speed thorough     # Deep scan (unlimited)
+cleanser scan --interactive        # Visual TUI browser
+cleanser scan --paths ~/Projects   # Scan specific paths
+cleanser scan --min-size 500       # Find files > 500MB
+cleanser scan --older-than 90d     # Files not modified in 90 days
+cleanser scan --find-duplicates    # Find duplicate files
+cleanser scan --json               # JSON output
+```
+
+### `clean` - Delete files by risk level
+
+```bash
+cleanser clean                     # Clean safe items (uses cache)
+cleanser clean --risk moderate     # Include build artifacts
+cleanser clean --risk risky        # Include large files
+cleanser clean --dry-run           # Preview only
+cleanser clean --force-scan        # Bypass cache
+cleanser clean --interactive       # Review files one by one
+cleanser clean -y                  # Skip confirmation
+```
+
+### `map` - Filesystem mapping
+
+Cleanser builds an intelligent map of your filesystem for faster repeated scans.
+
+```bash
+cleanser map show                  # View mapped directories
+cleanser map stats                 # Detailed breakdown by category
+cleanser map rebuild               # Force rebuild the map
+cleanser map clear                 # Delete the map
+```
+
+### `whitelist` - Permanent exclusions
+
+```bash
+cleanser whitelist add ~/important # Never scan this path
+cleanser whitelist remove ~/old    # Remove from whitelist
+cleanser whitelist list            # Show all whitelisted paths
+```
+
+### `cache` - Manage scan cache
+
+```bash
+cleanser cache show                # View cached scan results
+cleanser cache clear               # Clear the cache
+```
+
+## What Gets Cleaned
+
+| Risk Level | What's Included |
+|------------|-----------------|
+| **Safe** | System caches, browser caches, package manager caches (npm, pip, cargo), logs, `__pycache__`, temp files |
+| **Moderate** | `node_modules`, `target/` (Rust), `build/`, `dist/`, `.gradle`, `.next`, `.nuxt` |
+| **Risky** | Large files (> 100MB), duplicate files |
+
+Build directories are validated against project files (e.g., `target/` only if `Cargo.toml` exists).
 
 ## Platform Support
 
-| Platform | Status | Cache Locations | Build Artifacts |
-|----------|--------|-----------------|-----------------|
-| macOS    | ✅ Full | `~/Library/Caches`, `~/.cache` | All supported |
-| Linux    | ✅ Full | `~/.cache`, XDG paths | All supported |
-| Windows  | ✅ Full | `%LOCALAPPDATA%`, `%TEMP%` | All supported |
-
-Cleanser automatically detects your OS and scans the appropriate locations for caches, logs, build artifacts, and temporary files.
-
-## Features
-
-- **Cross-Platform**: Works on macOS, Linux, and Windows with OS-specific path detection
-- **Smart Caching**: Scan results are cached so `clean` doesn't re-scan unnecessarily
-- **Dynamic Discovery**: Pattern-based scanning finds cache directories, build artifacts, and logs anywhere in your filesystem
-- **Three scan speeds**: Quick (depth 3), Normal (depth 6), or Thorough (unlimited depth)
-- **Large file detection**: Find files above a configurable size threshold (default 100MB)
-- **Duplicate file finder**: SHA-256 based detection of duplicate files with parallel hashing
-- **Custom scan paths**: Scan specific directories instead of just your home folder
-- **Directory exclusion**: Exclude specific directories with `--ignore` flag (supports multiple patterns)
-- **Size range filtering**: Filter results by file size ranges (e.g., `--size-range 100MB-500MB`)
-- **Age-based filtering**: Target files by modification date (e.g., `--older-than 90d`, `--newer-than 7d`)
-- **Persistent whitelist**: Maintain a permanent list of directories to never scan or clean
-- **Interactive TUI mode**: Visual file browser with keyboard navigation for selecting files to delete
-- **Interactive large file deletion**: File-by-file prompts for reviewing large files before deletion
-- **Risk-based cleanup**: Safe, Moderate, or Risky levels to control what gets deleted
-- **Interactive confirmations**: Prevent accidental deletions with built-in prompts
-- **Dry-run mode**: Preview what would be deleted without actually deleting
-- **JSON output**: Machine-readable output for integration with other tools
-- **Parallel scanning**: Leverages Rust's Rayon for blazing-fast concurrent operations
-- **Progress indicators**: Real-time feedback during long-running scans
-
-## What Gets Cleaned (Dynamically Discovered)
-
-### Safe (Low Risk)
-- **Cache directories**: Any directory matching patterns like `*cache*`, `*Cache*`, `.cache`
-  - Browser caches (Chrome, Firefox, Safari)
-  - System caches (`~/Library/Caches`)
-  - Package manager caches (npm, pip, cargo, homebrew)
-- **Log files**: `.log` files over 10MB in common log directories
-- **Python artifacts**: `__pycache__`, `.pytest_cache` directories
-- **Temporary files**: System temp directories
-
-### Moderate Risk
-- **Node.js**: `node_modules` directories (validated against `package.json`)
-- **Build outputs**: `build/`, `dist/`, `out/` directories (validated against project files)
-- **Rust**: `target/` directories (validated against `Cargo.toml`)
-- **Java/Gradle**: `.gradle`, `.maven` directories
-- **Modern frameworks**: `.next`, `.nuxt` build caches
-
-### Risky (Requires Review)
-- **Large files**: Files exceeding size threshold (configurable, default 100MB)
-- **Duplicate files**: Exact copies detected via SHA-256 hashing
+| Platform | Cache Locations |
+|----------|-----------------|
+| macOS | `~/Library/Caches`, `~/.cache`, `~/Library/Logs` |
+| Linux | `~/.cache`, XDG paths, `/var/log` |
+| Windows | `%LOCALAPPDATA%`, `%TEMP%` |
 
 ## Installation
 
-### Option 1: Homebrew (Recommended)
-
+**Homebrew (macOS):**
 ```bash
-brew tap phpfc/cleanser
-brew install cleanser
+brew tap phpfc/cleanser && brew install cleanser
 ```
 
-### Option 2: Using the Install Script
-
+**Cargo:**
 ```bash
-# Clone and run the install script
-git clone https://github.com/phpfc/cleanser.git
-cd cleanser
-./install.sh
-```
-
-This builds the release binary and copies it to `/usr/local/bin` (may require sudo).
-
-### Option 3: Cargo Install (Rust Users)
-
-```bash
-# Install directly from source
 cargo install --git https://github.com/phpfc/cleanser.git
-
-# Or clone first
-git clone https://github.com/phpfc/cleanser.git
-cd cleanser
-cargo install --path .
 ```
 
-This installs to `~/.cargo/bin/cleanser` (make sure `~/.cargo/bin` is in your PATH).
-
-### Option 4: Manual Build
-
+**From source:**
 ```bash
-# Clone the repository
 git clone https://github.com/phpfc/cleanser.git
 cd cleanser
-
-# Build the release binary
 cargo build --release
-
-# The binary will be at target/release/cleanser
-# Copy it to a directory in your PATH:
 sudo cp target/release/cleanser /usr/local/bin/
 ```
 
-### Uninstallation
+## Safety
 
-**If installed via Homebrew:**
-```bash
-brew uninstall cleanser
-```
+- Always preview with `--dry-run` first
+- Start with `--risk safe`
+- Use `whitelist add` to protect important directories
+- Build directories are validated against project files
 
-**If installed via install script or manually:**
-```bash
-# Use the uninstall script
-./uninstall.sh
-
-# Or manually remove
-sudo rm /usr/local/bin/cleanser
-rm -rf ~/.cache/cleanser  # Optional: remove cache
-```
-
-**If installed via cargo:**
-```bash
-cargo uninstall cleanser
-```
-
-## Usage
-
-### Scan for cleanable files
-
-```bash
-# Quick scan (depth 3, fastest)
-cleanser scan --speed quick
-
-# Normal scan (depth 6, default)
-cleanser scan
-
-# Thorough scan (unlimited depth, finds everything)
-cleanser scan --speed thorough
-
-# Scan specific directories
-cleanser scan --paths ~/Projects ~/Downloads
-
-# Exclude directories from scanning
-cleanser scan --ignore ~/Projects/important --ignore ~/Documents/work
-
-# Find large files over 500MB
-cleanser scan --min-size 500
-
-# Filter by size range
-cleanser scan --size-range 100MB-500MB  # Files between 100-500MB
-cleanser scan --size-range 100MB-       # Files larger than 100MB
-cleanser scan --size-range -500MB       # Files smaller than 500MB
-
-# Filter by file age
-cleanser scan --older-than 90d          # Files not modified in 90 days
-cleanser scan --newer-than 7d           # Files modified in last 7 days
-cleanser scan --older-than 6m --newer-than 1m  # Files 1-6 months old
-
-# Find duplicate files (uses SHA-256 hashing)
-cleanser scan --find-duplicates
-
-# Interactive mode - visual file browser
-cleanser scan --interactive
-
-# Limit scan depth
-cleanser scan --max-depth 4
-
-# Combine options: scan Projects for large old files
-cleanser scan --paths ~/Projects --size-range 100MB- --older-than 90d --ignore ~/Projects/active
-
-# Output as JSON
-cleanser scan --json
-```
-
-### Manage whitelist (permanent exclusions)
-
-```bash
-# Add paths to whitelist
-cleanser whitelist add ~/Projects/important
-cleanser whitelist add ~/Documents/work
-
-# Remove from whitelist
-cleanser whitelist remove ~/Projects/old
-
-# List all whitelisted paths
-cleanser whitelist list
-
-# Whitelisted paths are automatically excluded from all scans
-cleanser scan  # Will skip whitelisted directories
-```
-
-### Clean files
-
-```bash
-# Clean only safe items (default)
-# Uses cached scan results if available (< 1 hour old)
-cleanser clean
-
-# Interactive mode - review large files one by one
-cleanser clean --interactive
-
-# Force a fresh scan instead of using cache
-cleanser clean --force-scan
-
-# Clean up to moderate risk items
-cleanser clean --risk moderate
-
-# Clean all items including risky ones
-cleanser clean --risk risky
-
-# Dry-run mode (see what would be deleted)
-cleanser clean --dry-run
-
-# Skip confirmation prompt
-cleanser clean --yes
-
-# Combine options
-cleanser clean --risk moderate --dry-run
-```
-
-### Caching Behavior
-
-Scan results are automatically cached to `~/.cache/cleanser/last-scan.json` for 1 hour. This means:
-
-```bash
-# First, run a scan to see what can be cleaned
-cleanser scan --speed normal
-
-# Later, clean without re-scanning (uses cache)
-cleanser clean --risk safe
-
-# Output: "Using cached scan results from 5 min 23 sec ago"
-```
-
-The cache is invalidated after 1 hour or when you run `cleanser scan` again. Use `--force-scan` to bypass the cache:
-
-```bash
-# Always scan fresh, ignore cache
-cleanser clean --force-scan --risk moderate
-```
-
-To prevent caching during a scan:
-
-```bash
-# Don't save results to cache
-cleanser scan --no-cache
-```
-
-## Examples
-
-### Find out how much space you can free
-
-```bash
-$ cleanser scan --speed thorough
-
-Scanning with thorough speed...
-Scanning 12 locations...
-
-=== Scan Results ===
-Total cleanable space: 4.2 GB
-
-Safe Risk (1.8 GB)
-  System Cache - 512 MB - ~/Library/Caches
-  Browser Cache - 890 MB - ~/Library/Caches/Google/Chrome
-  System Logs - 156 MB - ~/Library/Logs
-  Temporary Files - 242 MB - /tmp
-
-Moderate Risk (2.4 GB)
-  Node Modules - 1.2 GB - ~/Dev/project1/node_modules
-  Node Modules - 890 MB - ~/Dev/project2/node_modules
-  Cargo Cache - 310 MB - ~/.cargo/registry
-
-Run 'cleanser clean --risk <level>' to clean files
-```
-
-### Preview what will be deleted
-
-```bash
-$ cleanser clean --risk moderate --dry-run
-
-Scanning for cleanable items...
-Scanning 8 locations...
-
-=== Items to Clean ===
-Total space to free: 2.1 GB
-
-✓ System Cache - 512 MB - ~/Library/Caches
-✓ Browser Cache - 890 MB - ~/Library/Caches/Google/Chrome
-⚠ Node Modules - 1.2 GB - ~/Dev/old-project/node_modules
-
-DRY RUN: No files were deleted.
-```
-
-### Actually clean files
-
-```bash
-$ cleanser clean --risk safe
-
-Scanning for cleanable items...
-
-=== Items to Clean ===
-Total space to free: 1.6 GB
-
-✓ System Cache - 512 MB - ~/Library/Caches
-✓ Browser Cache - 890 MB - ~/Library/Caches/Google/Chrome
-✓ System Logs - 156 MB - ~/Library/Logs
-
-This will delete files. Continue? (y/N)
-y
-
-✓ Cleaned: ~/Library/Caches
-✓ Cleaned: ~/Library/Caches/Google/Chrome
-✓ Cleaned: ~/Library/Logs
-
-=== Cleanup Summary ===
-Cleaned: 3 items
-Failed: 0 items
-Space freed: 1.6 GB
-```
-
-## Safety Features
-
-- **Smart validation**: Build directories are validated against project files (e.g., `target/` must have `Cargo.toml`)
-- **Pattern matching**: Uses regex patterns to identify safe-to-delete directories
-- **Skip system directories**: Automatically skips system-critical directories on all platforms
-- **Confirmation prompts**: By default, you'll be asked to confirm before deletion
-- **Dry-run mode**: Test what will be deleted with `--dry-run`
-- **Risk levels**: Control what gets deleted with `--risk` flag
-- **Detailed output**: See exactly what's being deleted with file sizes and categories
-
-## Performance
-
-Cleanser is built with performance in mind:
-- **Written in Rust**: Maximum speed, memory safety, and zero-cost abstractions
-- **Parallel everything**: Directory scanning, file hashing, and size calculations use Rayon
-- **Efficient hashing**: SHA-256 with 8KB buffers for fast duplicate detection
-- **Smart traversal**: Configurable depth limits to avoid scanning unnecessary directories
-- **Minimal dependencies**: Fast compilation and small binary size
-- **Single binary**: No runtime required, just download and run
-
-## Development
-
-### Prerequisites
-
-- Rust 1.70 or higher
-- macOS, Linux, or Windows
-
-### Building
-
-```bash
-cargo build
-```
-
-### Running tests
-
-```bash
-cargo test
-```
-
-### Running in development
-
-```bash
-cargo run -- scan --speed quick
-cargo run -- clean --dry-run
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+**This tool permanently deletes files. Use at your own risk.**
 
 ## License
 
 MIT
-
-## Roadmap
-
-- [x] Add large file detection with configurable thresholds
-- [x] Add duplicate file detection with SHA-256 hashing
-- [x] Add support for custom scan locations
-- [x] Add more development tool caches (Gradle, Maven, .next, .nuxt, etc.)
-- [x] Dynamic pattern-based discovery of caches and build artifacts
-- [x] Smart caching system to avoid re-scanning on clean operations
-- [x] Add configurable exclusion patterns (--ignore flag)
-- [x] Add interactive TUI mode for reviewing files before deletion
-- [x] Add persistent whitelist configuration
-- [x] Add size range filtering
-- [x] Add age-based file targeting
-- [ ] Add configurable exclusion patterns (regex-based)
-- [ ] Add scheduled cleanup support (cron integration)
-- [ ] Generate detailed cleanup reports (HTML/PDF)
-- [ ] Add compression detection (find already-compressed files in archives)
-- [x] Cross-platform support (macOS, Linux, Windows)
-- [ ] Config file support (~/.cleanser.toml)
-
-## Safety Disclaimer
-
-This tool permanently deletes files. While it's designed to only target safe temporary files and caches, always:
-- Review what will be deleted using `--dry-run`
-- Start with `--risk safe`
-- Have backups of important data
-- Use at your own risk
-
-The authors are not responsible for any data loss.

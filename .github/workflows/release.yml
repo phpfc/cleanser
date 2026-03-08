@@ -187,6 +187,53 @@ jobs:
             ## Changes
             See [CHANGELOG.md](https://github.com/phpfc/cleanser/blob/main/CHANGELOG.md) for details.
 
+  update-landing:
+    name: Update Landing Page Downloads
+    needs: [build-macos, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p downloads
+          gh release download ${{ github.ref_name }} --repo phpfc/cleanser --dir downloads
+
+      - name: Clone landing page repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/phpfc/cleanser-landing.git landing
+
+      - name: Update downloads
+        run: |
+          rm -rf landing/downloads
+          mv downloads landing/
+
+          # Create downloads.json with version info
+          cat > landing/downloads/index.json << EOF
+          {
+            "version": "${{ steps.get_version.outputs.version }}",
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "files": $(ls -1 landing/downloads | grep -v index.json | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          }
+          EOF
+
+      - name: Commit and push
+        env:
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          cd landing
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add downloads/
+          git commit -m "Update downloads to v${{ steps.get_version.outputs.version }}"
+          git push
+
   build-bottle:
     name: Build Homebrew Bottle
     needs: build-macos

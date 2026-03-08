@@ -88,22 +88,8 @@ impl Platform {
     /// Get platform-specific directories that should be skipped during scanning
     pub fn system_protected_dirs(&self) -> Vec<&'static str> {
         match self {
-            Platform::MacOS => vec![
-                "/System",
-                "/Library",
-                "/private",
-                "/dev",
-                "/proc",
-                "/cores",
-            ],
-            Platform::Linux => vec![
-                "/sys",
-                "/proc",
-                "/dev",
-                "/boot",
-                "/root",
-                "/run",
-            ],
+            Platform::MacOS => vec!["/System", "/Library", "/private", "/dev", "/proc", "/cores"],
+            Platform::Linux => vec!["/sys", "/proc", "/dev", "/boot", "/root", "/run"],
             Platform::Windows => vec![
                 "C:\\Windows",
                 "C:\\Program Files",

@@ -52,7 +52,10 @@ impl fmt::Display for RiskLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanableItem {
-    #[serde(serialize_with = "serialize_pathbuf", deserialize_with = "deserialize_pathbuf")]
+    #[serde(
+        serialize_with = "serialize_pathbuf",
+        deserialize_with = "deserialize_pathbuf"
+    )]
     pub path: PathBuf,
     pub size: u64,
     pub category: CleanCategory,
@@ -168,7 +171,7 @@ impl IgnoreList {
     pub fn add_pattern(&mut self, path: &str) -> anyhow::Result<()> {
         let expanded_path = if path.starts_with('~') {
             let home = platform::home_dir_or_err()?;
-            PathBuf::from(path.replacen('~', &home.to_string_lossy().as_ref(), 1))
+            PathBuf::from(path.replacen('~', home.to_string_lossy().as_ref(), 1))
         } else {
             PathBuf::from(path)
         };
@@ -212,9 +215,11 @@ pub struct SizeRange {
 impl SizeRange {
     pub fn parse(input: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = input.split('-').collect();
-        
+
         if parts.len() != 2 {
-            anyhow::bail!("Invalid size range format. Expected format: '100MB-500MB', '100MB-', or '-500MB'");
+            anyhow::bail!(
+                "Invalid size range format. Expected format: '100MB-500MB', '100MB-', or '-500MB'"
+            );
         }
 
         let min = if parts[0].is_empty() {
@@ -232,9 +237,11 @@ impl SizeRange {
         // Validate min <= max
         if let (Some(min_val), Some(max_val)) = (min, max) {
             if min_val > max_val {
-                anyhow::bail!("Minimum size ({}) cannot be greater than maximum size ({})", 
+                anyhow::bail!(
+                    "Minimum size ({}) cannot be greater than maximum size ({})",
                     humansize::format_size(min_val, humansize::BINARY),
-                    humansize::format_size(max_val, humansize::BINARY));
+                    humansize::format_size(max_val, humansize::BINARY)
+                );
             }
         }
 
@@ -242,15 +249,15 @@ impl SizeRange {
     }
 
     pub fn contains(&self, size: u64) -> bool {
-        let min_ok = self.min.map_or(true, |min| size >= min);
-        let max_ok = self.max.map_or(true, |max| size <= max);
+        let min_ok = self.min.is_none_or(|min| size >= min);
+        let max_ok = self.max.is_none_or(|max| size <= max);
         min_ok && max_ok
     }
 }
 
 fn parse_size_with_unit(input: &str) -> anyhow::Result<u64> {
     let input = input.trim().to_uppercase();
-    
+
     let (num_str, unit) = if input.ends_with("TB") {
         (&input[..input.len() - 2], 1024u64.pow(4))
     } else if input.ends_with("GB") {
@@ -266,9 +273,11 @@ fn parse_size_with_unit(input: &str) -> anyhow::Result<u64> {
         (input.as_str(), 1024u64.pow(2))
     };
 
-    let num: f64 = num_str.trim().parse()
+    let num: f64 = num_str
+        .trim()
+        .parse()
         .map_err(|_| anyhow::anyhow!("Invalid number in size: {}", input))?;
-    
+
     Ok((num * unit as f64) as u64)
 }
 
@@ -298,10 +307,12 @@ impl AgeCriteria {
 
     pub fn matches(&self, modified_time: SystemTime) -> bool {
         let now = SystemTime::now();
-        let age = now.duration_since(modified_time).unwrap_or(Duration::from_secs(0));
+        let age = now
+            .duration_since(modified_time)
+            .unwrap_or(Duration::from_secs(0));
 
-        let older_ok = self.older_than.map_or(true, |threshold| age >= threshold);
-        let newer_ok = self.newer_than.map_or(true, |threshold| age <= threshold);
+        let older_ok = self.older_than.is_none_or(|threshold| age >= threshold);
+        let newer_ok = self.newer_than.is_none_or(|threshold| age <= threshold);
 
         older_ok && newer_ok
     }
@@ -309,7 +320,7 @@ impl AgeCriteria {
 
 pub fn parse_duration(input: &str) -> anyhow::Result<Duration> {
     let input = input.trim().to_lowercase();
-    
+
     let (num_str, multiplier) = if input.ends_with('y') {
         (&input[..input.len() - 1], 365 * 24 * 60 * 60)
     } else if input.ends_with('m') {
@@ -322,9 +333,11 @@ pub fn parse_duration(input: &str) -> anyhow::Result<Duration> {
         anyhow::bail!("Invalid duration format. Expected format: '90d', '2w', '6m', or '1y'");
     };
 
-    let num: u64 = num_str.trim().parse()
+    let num: u64 = num_str
+        .trim()
+        .parse()
         .map_err(|_| anyhow::anyhow!("Invalid number in duration: {}", input))?;
-    
+
     Ok(Duration::from_secs(num * multiplier))
 }
 
@@ -349,7 +362,10 @@ impl WhitelistConfig {
 
         // Use platform-appropriate config directory
         let config_dir = match platform::Platform::current() {
-            platform::Platform::MacOS => home.join("Library").join("Application Support").join("cleanser"),
+            platform::Platform::MacOS => home
+                .join("Library")
+                .join("Application Support")
+                .join("cleanser"),
             platform::Platform::Linux => home.join(".config").join("cleanser"),
             platform::Platform::Windows => home.join("AppData").join("Local").join("cleanser"),
         };
@@ -396,7 +412,7 @@ impl WhitelistConfig {
 
     pub fn save(&self) -> anyhow::Result<()> {
         let config_path = Self::get_config_path()?;
-        
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -482,12 +498,12 @@ pub struct FileItem {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortMode {
-    SizeDesc,      // Heaviest first (default)
-    SizeAsc,       // Lightest first
-    DateOldest,    // Oldest first
-    DateNewest,    // Newest first
-    PathAsc,       // Path A-Z
-    PathDesc,      // Path Z-A
+    SizeDesc,   // Heaviest first (default)
+    SizeAsc,    // Lightest first
+    DateOldest, // Oldest first
+    DateNewest, // Newest first
+    PathAsc,    // Path A-Z
+    PathDesc,   // Path Z-A
 }
 
 impl std::fmt::Display for SortMode {
@@ -721,7 +737,7 @@ mod tests {
     fn test_ignore_list_should_ignore() {
         let mut ignore_list = IgnoreList::new();
         ignore_list.add_pattern("/test/ignore").unwrap();
-        
+
         assert!(ignore_list.should_ignore(Path::new("/test/ignore")));
         assert!(ignore_list.should_ignore(Path::new("/test/ignore/subdir")));
         assert!(!ignore_list.should_ignore(Path::new("/test/other")));
@@ -814,15 +830,13 @@ mod tests {
 
     #[test]
     fn test_tui_state_toggle_selection() {
-        let items = vec![
-            FileItem {
-                path: PathBuf::from("/test1"),
-                size: 100,
-                modified: SystemTime::now(),
-                risk_level: RiskLevel::Safe,
-                selected: false,
-            },
-        ];
+        let items = vec![FileItem {
+            path: PathBuf::from("/test1"),
+            size: 100,
+            modified: SystemTime::now(),
+            risk_level: RiskLevel::Safe,
+            selected: false,
+        }];
 
         let mut state = TuiState::new(items);
         assert_eq!(state.selected_count, 0);

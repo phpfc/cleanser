@@ -17,12 +17,23 @@ fn run_fresh_scan() -> Result<ScanResults> {
         Ok(whitelist) => {
             for path in whitelist.list_paths() {
                 if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
-                    eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Warning: Could not add whitelisted path '{}': {}",
+                            path.display(),
+                            e
+                        )
+                        .yellow()
+                    );
                 }
             }
         }
         Err(e) => {
-            eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+            eprintln!(
+                "{}",
+                format!("Warning: Could not load whitelist: {}", e).yellow()
+            );
         }
     }
 
@@ -131,7 +142,9 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
 
     for item in items_to_clean {
         // Show current file being cleaned
-        let file_name = item.path.file_name()
+        let file_name = item
+            .path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
         pb.set_message(format!("Cleaning: {}", file_name));
@@ -141,19 +154,30 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
                 cleaned_size += size;
                 cleaned_count += 1;
                 deleted_paths.push(item.path.clone());
-                pb.println(format!("{} Cleaned: {}", "✓".green(), item.path.display().to_string().dimmed()));
+                pb.println(format!(
+                    "{} Cleaned: {}",
+                    "✓".green(),
+                    item.path.display().to_string().dimmed()
+                ));
             }
             Err(e) => {
                 failed_count += 1;
-                pb.println(format!("{} Failed to clean {}: {}", "✗".red(), item.path.display(), e));
+                pb.println(format!(
+                    "{} Failed to clean {}: {}",
+                    "✗".red(),
+                    item.path.display(),
+                    e
+                ));
             }
         }
         pb.inc(1);
     }
 
-    pb.finish_with_message(format!("Cleanup complete! {} items cleaned, {} failed",
+    pb.finish_with_message(format!(
+        "Cleanup complete! {} items cleaned, {} failed",
         cleaned_count.to_string().green(),
-        failed_count.to_string().red()));
+        failed_count.to_string().red()
+    ));
 
     println!("\n{}", "=== Cleanup Summary ===".green().bold());
     println!(
@@ -180,7 +204,6 @@ pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<()>
 }
 
 fn delete_item(path: &Path) -> Result<u64> {
-
     if !path.exists() {
         return Ok(0);
     }
@@ -209,7 +232,7 @@ fn get_dir_size_fast(path: &Path) -> Result<u64> {
     let total: u64 = walkdir::WalkDir::new(path)
         .follow_links(false)
         .into_iter()
-        .par_bridge()  // Parallelize the iteration
+        .par_bridge() // Parallelize the iteration
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter_map(|e| e.metadata().ok())

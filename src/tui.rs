@@ -28,7 +28,7 @@ pub fn run_interactive_mode(scan_results: &ScanResults) -> Result<Vec<FileItem>>
             let modified = std::fs::metadata(&item.path)
                 .and_then(|m| m.modified())
                 .unwrap_or_else(|_| SystemTime::now());
-            
+
             FileItem {
                 path: item.path.clone(),
                 size: item.size,
@@ -136,10 +136,10 @@ fn render_ui(f: &mut Frame, state: &TuiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),      // Header (expanded to 4 for 2 lines)
-            Constraint::Min(10),         // File list
-            Constraint::Length(6),       // Details panel
-            Constraint::Length(4),       // Help footer (expanded to 4 for 2 lines)
+            Constraint::Length(4), // Header (expanded to 4 for 2 lines)
+            Constraint::Min(10),   // File list
+            Constraint::Length(6), // Details panel
+            Constraint::Length(4), // Help footer (expanded to 4 for 2 lines)
         ])
         .split(f.size());
 
@@ -158,29 +158,36 @@ fn render_ui(f: &mut Frame, state: &TuiState) {
 
 fn render_header(f: &mut Frame, area: Rect, state: &TuiState) {
     let title = vec![
-        Line::from(vec![
-            Span::styled(
-                format!("Cleanser Interactive Mode - {} items", state.items.len()),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            ),
-        ]),
+        Line::from(vec![Span::styled(
+            format!("Cleanser Interactive Mode - {} items", state.items.len()),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(vec![
             Span::styled("Selected: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                format!("{} items ({})", state.selected_count, format_size(state.total_selected_size, BINARY)),
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                format!(
+                    "{} items ({})",
+                    state.selected_count,
+                    format_size(state.total_selected_size, BINARY)
+                ),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  |  "),
             Span::styled("Sort: ", Style::default().fg(Color::Gray)),
             Span::styled(
                 format!("{}", state.sort_mode),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
     ];
 
-    let header = Paragraph::new(title)
-        .block(Block::default().borders(Borders::ALL));
+    let header = Paragraph::new(title).block(Block::default().borders(Borders::ALL));
 
     f.render_widget(header, area);
 }
@@ -205,11 +212,15 @@ fn render_file_list(f: &mut Frame, area: Rect, state: &TuiState) {
         .take(visible_height)
         .map(|(i, item)| {
             let checkbox = if item.selected { "[✓]" } else { "[ ]" };
-            let cursor = if i == state.cursor_position { "> " } else { "  " };
-            
+            let cursor = if i == state.cursor_position {
+                "> "
+            } else {
+                "  "
+            };
+
             let path_str = item.path.to_string_lossy();
             let size_str = format_size(item.size, BINARY);
-            
+
             // Truncate path if too long
             let max_path_len = area.width.saturating_sub(30) as usize;
             let display_path = if path_str.len() > max_path_len {
@@ -218,13 +229,19 @@ fn render_file_list(f: &mut Frame, area: Rect, state: &TuiState) {
                 path_str.to_string()
             };
 
-            let line = format!("{}{} {:width$} {:>12}", 
-                cursor, checkbox, display_path, size_str,
+            let line = format!(
+                "{}{} {:width$} {:>12}",
+                cursor,
+                checkbox,
+                display_path,
+                size_str,
                 width = max_path_len
             );
 
             let style = if i == state.cursor_position {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else if item.selected {
                 Style::default().fg(Color::Green)
             } else {
@@ -235,8 +252,7 @@ fn render_file_list(f: &mut Frame, area: Rect, state: &TuiState) {
         })
         .collect();
 
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Files"));
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Files"));
 
     f.render_widget(list, area);
 }
@@ -244,7 +260,7 @@ fn render_file_list(f: &mut Frame, area: Rect, state: &TuiState) {
 fn render_details(f: &mut Frame, area: Rect, state: &TuiState) {
     let details = if let Some(item) = state.items.get(state.cursor_position) {
         let modified_str = format_system_time(item.modified);
-        
+
         vec![
             Line::from(vec![
                 Span::styled("Path: ", Style::default().add_modifier(Modifier::BOLD)),
@@ -267,8 +283,8 @@ fn render_details(f: &mut Frame, area: Rect, state: &TuiState) {
         vec![Line::from("No item selected")]
     };
 
-    let paragraph = Paragraph::new(details)
-        .block(Block::default().borders(Borders::ALL).title("Details"));
+    let paragraph =
+        Paragraph::new(details).block(Block::default().borders(Borders::ALL).title("Details"));
 
     f.render_widget(paragraph, area);
 }
@@ -297,15 +313,15 @@ fn render_footer(f: &mut Frame, area: Rect) {
         ]),
     ];
 
-    let footer = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL).title("Help"));
+    let footer =
+        Paragraph::new(help_text).block(Block::default().borders(Borders::ALL).title("Help"));
 
     f.render_widget(footer, area);
 }
 
 fn format_system_time(time: SystemTime) -> String {
     use std::time::UNIX_EPOCH;
-    
+
     if let Ok(duration) = time.duration_since(UNIX_EPOCH) {
         let secs = duration.as_secs();
         let datetime = chrono::DateTime::from_timestamp(secs as i64, 0);
@@ -313,10 +329,9 @@ fn format_system_time(time: SystemTime) -> String {
             return dt.format("%Y-%m-%d %H:%M:%S").to_string();
         }
     }
-    
+
     "Unknown".to_string()
 }
-
 
 #[allow(dead_code)]
 pub fn run_interactive_large_file_deletion(
@@ -332,17 +347,30 @@ pub fn run_interactive_large_file_deletion(
         prompt.current_index = index + 1;
 
         // Display file information in a cleaner format
-        println!("\n{}", "============================================================".cyan());
-        println!("{}", format!("File {} of {}:", prompt.current_index, prompt.total_files).bold());
+        println!(
+            "\n{}",
+            "============================================================".cyan()
+        );
+        println!(
+            "{}",
+            format!("File {} of {}:", prompt.current_index, prompt.total_files).bold()
+        );
         println!("  {}: {}", "Path".bold(), item.path.display());
-        println!("  {}: {}", "Size".bold(), format_size(item.size, BINARY).green());
+        println!(
+            "  {}: {}",
+            "Size".bold(),
+            format_size(item.size, BINARY).green()
+        );
         println!("  {}: {}", "Category".bold(), item.category);
-        println!("  {}: {}", "Risk Level".bold(),
-                 match item.risk_level {
-                     RiskLevel::Safe => format!("{}", item.risk_level).green(),
-                     RiskLevel::Moderate => format!("{}", item.risk_level).yellow(),
-                     RiskLevel::Risky => format!("{}", item.risk_level).red(),
-                 });
+        println!(
+            "  {}: {}",
+            "Risk Level".bold(),
+            match item.risk_level {
+                RiskLevel::Safe => format!("{}", item.risk_level).green(),
+                RiskLevel::Moderate => format!("{}", item.risk_level).yellow(),
+                RiskLevel::Risky => format!("{}", item.risk_level).red(),
+            }
+        );
 
         // Get modification time
         if let Ok(metadata) = std::fs::metadata(&item.path) {
@@ -351,7 +379,10 @@ pub fn run_interactive_large_file_deletion(
             }
         }
 
-        println!("{}", "============================================================".cyan());
+        println!(
+            "{}",
+            "============================================================".cyan()
+        );
 
         // Prompt for action
         loop {
@@ -383,7 +414,10 @@ pub fn run_interactive_large_file_deletion(
 
                         match result {
                             Ok(_) => {
-                                println!("{}", format!("✓ Deleted: {}", item.path.display()).green());
+                                println!(
+                                    "{}",
+                                    format!("✓ Deleted: {}", item.path.display()).green()
+                                );
                                 prompt.deleted_count += 1;
                                 deleted_paths.push(item.path.clone());
                             }

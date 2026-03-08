@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::path::PathBuf;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use std::path::{Path, PathBuf};
 
 use super::Platform;
 
@@ -69,8 +69,7 @@ pub fn get_cache_dir() -> Result<PathBuf> {
 
 /// Get user home directory
 pub fn get_home_dir() -> Result<PathBuf> {
-    dirs::home_dir()
-        .context("Could not determine home directory")
+    dirs::home_dir().context("Could not determine home directory")
 }
 
 /// Get common user directories to scan
@@ -129,14 +128,12 @@ pub fn get_system_scan_dirs() -> Vec<PathBuf> {
             PathBuf::from("/var/cache"),
             PathBuf::from("/tmp"),
         ],
-        Platform::Windows => vec![
-            PathBuf::from("C:\\Windows\\Temp"),
-        ],
+        Platform::Windows => vec![PathBuf::from("C:\\Windows\\Temp")],
     }
 }
 
 /// Check if a path should be protected from scanning
-pub fn is_protected_path(path: &PathBuf) -> bool {
+pub fn is_protected_path(path: &Path) -> bool {
     let platform = Platform::current();
     let protected_dirs = platform.system_protected_dirs();
 
@@ -150,9 +147,9 @@ pub fn is_protected_path(path: &PathBuf) -> bool {
 }
 
 /// Normalize a path to be absolute and canonical if possible
-pub fn normalize_path(path: &PathBuf) -> PathBuf {
+pub fn normalize_path(path: &Path) -> PathBuf {
     // Try to canonicalize, but fall back to the original path if it fails
-    path.canonicalize().unwrap_or_else(|_| path.clone())
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(test)]
@@ -174,6 +171,9 @@ mod tests {
     #[test]
     fn test_platform_detection() {
         let platform = Platform::current();
-        assert!(matches!(platform, Platform::MacOS | Platform::Linux | Platform::Windows));
+        assert!(matches!(
+            platform,
+            Platform::MacOS | Platform::Linux | Platform::Windows
+        ));
     }
 }

@@ -160,8 +160,8 @@ enum MapAction {
 }
 
 fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
-    use mapper::{FileSystemCrawler, FileSystemMap};
     use mapper::filesystem_map::DirectoryCategory;
+    use mapper::{FileSystemCrawler, FileSystemMap};
 
     match action {
         MapAction::Show => {
@@ -169,40 +169,71 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                 Ok(map) => {
                     // Header
                     println!();
-                    println!("  {}", "╔════════════════════════════════════════════════════════════╗".cyan());
-                    println!("  {}  {:<56}  {}", "║".cyan(), "FILESYSTEM MAP".cyan().bold(), "║".cyan());
-                    println!("  {}", "╚════════════════════════════════════════════════════════════╝".cyan());
+                    println!(
+                        "  {}",
+                        "╔════════════════════════════════════════════════════════════╗".cyan()
+                    );
+                    println!(
+                        "  {}  {:<56}  {}",
+                        "║".cyan(),
+                        "FILESYSTEM MAP".cyan().bold(),
+                        "║".cyan()
+                    );
+                    println!(
+                        "  {}",
+                        "╚════════════════════════════════════════════════════════════╝".cyan()
+                    );
                     println!();
 
                     // Summary stats
-                    let cleanable_count = map.directories.values()
-                        .filter(|d| matches!(d.category, DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact))
+                    let cleanable_count = map
+                        .directories
+                        .values()
+                        .filter(|d| {
+                            matches!(
+                                d.category,
+                                DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact
+                            )
+                        })
                         .count();
 
-                    println!("  {} {}", "Total mapped:".dimmed(), format!("{} directories", map.total_directories));
-                    println!("  {} {}",
+                    println!(
+                        "  {} {} directories",
+                        "Total mapped:".dimmed(),
+                        map.total_directories
+                    );
+                    println!(
+                        "  {} {}",
                         "Cleanable:".green().bold(),
                         format!("{} directories", cleanable_count).green()
                     );
 
                     let created = chrono::DateTime::from_timestamp(map.created_at as i64, 0)
                         .unwrap_or_default();
-                    println!("  {} {}", "Last scan:".dimmed(), created.format("%Y-%m-%d %H:%M"));
+                    println!(
+                        "  {} {}",
+                        "Last scan:".dimmed(),
+                        created.format("%Y-%m-%d %H:%M")
+                    );
 
                     if map.is_stale() {
                         println!();
-                        println!("  {}", "⚠ Map is stale (>7 days). Run: cleanser map rebuild".yellow());
+                        println!(
+                            "  {}",
+                            "⚠ Map is stale (>7 days). Run: cleanser map rebuild".yellow()
+                        );
                     }
 
                     // Cleanable by category
                     println!();
-                    println!("  {}", "─── Cleanable Categories ──────────────────────────────────".cyan());
+                    println!(
+                        "  {}",
+                        "─── Cleanable Categories ──────────────────────────────────".cyan()
+                    );
                     println!();
 
-                    let mut tag_counts: Vec<_> = map.stats_by_tag()
-                        .into_iter()
-                        .collect();
-                    tag_counts.sort_by(|a, b| b.1.0.cmp(&a.1.0)); // Sort by count
+                    let mut tag_counts: Vec<_> = map.stats_by_tag().into_iter().collect();
+                    tag_counts.sort_by(|a, b| b.1 .0.cmp(&a.1 .0)); // Sort by count
 
                     let max_count = tag_counts.first().map(|(_, (c, _))| *c).unwrap_or(1);
 
@@ -210,19 +241,30 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                         let bar_width = ((*count * 30) / max_count).max(1);
                         let bar = "█".repeat(bar_width);
 
-                        println!("  {:>14}  {:>5} dirs  {}",
-                            tag.yellow(),
-                            count,
-                            bar.green()
-                        );
+                        println!("  {:>14}  {:>5} dirs  {}", tag.yellow(), count, bar.green());
                     }
 
                     println!();
-                    println!("  {}", "─── Quick Actions ─────────────────────────────────────────".cyan());
+                    println!(
+                        "  {}",
+                        "─── Quick Actions ─────────────────────────────────────────".cyan()
+                    );
                     println!();
-                    println!("  {} cleanser scan              {}", "→".green(), "Scan and calculate sizes".dimmed());
-                    println!("  {} cleanser map stats         {}", "→".green(), "View detailed breakdown".dimmed());
-                    println!("  {} cleanser map rebuild       {}", "→".green(), "Refresh the map".dimmed());
+                    println!(
+                        "  {} cleanser scan              {}",
+                        "→".green(),
+                        "Scan and calculate sizes".dimmed()
+                    );
+                    println!(
+                        "  {} cleanser map stats         {}",
+                        "→".green(),
+                        "View detailed breakdown".dimmed()
+                    );
+                    println!(
+                        "  {} cleanser map rebuild       {}",
+                        "→".green(),
+                        "Refresh the map".dimmed()
+                    );
                     println!();
                 }
                 Err(_) => {
@@ -234,7 +276,10 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                 }
             }
         }
-        MapAction::Rebuild { max_depth, min_confidence } => {
+        MapAction::Rebuild {
+            max_depth,
+            min_confidence,
+        } => {
             println!();
             println!("  {}", "Rebuilding filesystem map...".cyan());
             println!();
@@ -247,36 +292,68 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
             let map = crawler.crawl_full()?;
             map.save()?;
 
-            let cleanable_count = map.directories.values()
-                .filter(|d| matches!(d.category, DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact))
+            let cleanable_count = map
+                .directories
+                .values()
+                .filter(|d| {
+                    matches!(
+                        d.category,
+                        DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact
+                    )
+                })
                 .count();
 
             println!();
             println!("  {}", "✓ Filesystem map rebuilt!".green().bold());
             println!();
-            println!("  {} {}", "Directories mapped:".dimmed(), map.total_directories);
-            println!("  {} {}", "Cleanable directories:".green(), format!("{}", cleanable_count).green().bold());
+            println!(
+                "  {} {}",
+                "Directories mapped:".dimmed(),
+                map.total_directories
+            );
+            println!(
+                "  {} {}",
+                "Cleanable directories:".green(),
+                format!("{}", cleanable_count).green().bold()
+            );
             println!();
-            println!("  {}", "Run 'cleanser scan --use-map' to analyze sizes.".dimmed());
+            println!(
+                "  {}",
+                "Run 'cleanser scan --use-map' to analyze sizes.".dimmed()
+            );
             println!();
         }
         MapAction::Stats => {
             match FileSystemMap::load() {
                 Ok(map) => {
                     println!();
-                    println!("  {}", "╔════════════════════════════════════════════════════════════╗".cyan());
-                    println!("  {}  {:<56}  {}", "║".cyan(), "DETAILED STATISTICS".cyan().bold(), "║".cyan());
-                    println!("  {}", "╚════════════════════════════════════════════════════════════╝".cyan());
+                    println!(
+                        "  {}",
+                        "╔════════════════════════════════════════════════════════════╗".cyan()
+                    );
+                    println!(
+                        "  {}  {:<56}  {}",
+                        "║".cyan(),
+                        "DETAILED STATISTICS".cyan().bold(),
+                        "║".cyan()
+                    );
+                    println!(
+                        "  {}",
+                        "╚════════════════════════════════════════════════════════════╝".cyan()
+                    );
                     println!();
 
                     // By Category with visual bars
-                    println!("  {}", "─── By Category ───────────────────────────────────────────".cyan());
+                    println!(
+                        "  {}",
+                        "─── By Category ───────────────────────────────────────────".cyan()
+                    );
                     println!();
 
                     // By Category
                     let stats = map.stats_by_category();
                     let mut stats_vec: Vec<_> = stats.iter().collect();
-                    stats_vec.sort_by(|a, b| b.1.0.cmp(&a.1.0)); // Sort by count
+                    stats_vec.sort_by(|a, b| b.1 .0.cmp(&a.1 .0)); // Sort by count
                     let max_count = stats_vec.first().map(|(_, (c, _))| *c).unwrap_or(1);
 
                     for (category, (count, _)) in &stats_vec {
@@ -291,14 +368,16 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                         let bar_width = ((*count * 25) / max_count).max(1);
                         let bar = "█".repeat(bar_width);
 
-                        let (cat_color, bar_color): (fn(&str) -> colored::ColoredString, fn(&str) -> colored::ColoredString) = match category {
+                        type ColorFn = fn(&str) -> colored::ColoredString;
+                        let (cat_color, bar_color): (ColorFn, ColorFn) = match category {
                             DirectoryCategory::Ephemeral => (|s| s.green(), |s| s.green()),
                             DirectoryCategory::BuildArtifact => (|s| s.yellow(), |s| s.yellow()),
                             DirectoryCategory::UserContent => (|s| s.blue(), |s| s.blue()),
                             _ => (|s| s.white(), |s| s.white()),
                         };
 
-                        println!("  {:>16}  {:>6} dirs  {}",
+                        println!(
+                            "  {:>16}  {:>6} dirs  {}",
                             cat_color(cat_name),
                             count,
                             bar_color(&bar)
@@ -307,41 +386,59 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
 
                     // By Tag
                     println!();
-                    println!("  {}", "─── By Type (Top 15) ──────────────────────────────────────".cyan());
+                    println!(
+                        "  {}",
+                        "─── By Type (Top 15) ──────────────────────────────────────".cyan()
+                    );
                     println!();
 
                     let tag_stats = map.stats_by_tag();
                     let mut tag_vec: Vec<_> = tag_stats.iter().collect();
-                    tag_vec.sort_by(|a, b| b.1.0.cmp(&a.1.0)); // Sort by count
+                    tag_vec.sort_by(|a, b| b.1 .0.cmp(&a.1 .0)); // Sort by count
 
                     for (tag, (count, _)) in tag_vec.iter().take(15) {
-                        println!("  {:>16}  {:>6} dirs",
-                            tag.yellow(),
-                            count
-                        );
+                        println!("  {:>16}  {:>6} dirs", tag.yellow(), count);
                     }
 
                     // Confidence breakdown
                     println!();
-                    println!("  {}", "─── Classification Confidence ─────────────────────────────".cyan());
+                    println!(
+                        "  {}",
+                        "─── Classification Confidence ─────────────────────────────".cyan()
+                    );
                     println!();
 
-                    let high_conf = map.directories.values().filter(|d| d.confidence >= 0.9).count();
-                    let med_conf = map.directories.values().filter(|d| d.confidence >= 0.7 && d.confidence < 0.9).count();
-                    let low_conf = map.directories.values().filter(|d| d.confidence < 0.7).count();
+                    let high_conf = map
+                        .directories
+                        .values()
+                        .filter(|d| d.confidence >= 0.9)
+                        .count();
+                    let med_conf = map
+                        .directories
+                        .values()
+                        .filter(|d| d.confidence >= 0.7 && d.confidence < 0.9)
+                        .count();
+                    let low_conf = map
+                        .directories
+                        .values()
+                        .filter(|d| d.confidence < 0.7)
+                        .count();
                     let total = map.directories.len();
 
-                    println!("  {:>16}  {} {}",
+                    println!(
+                        "  {:>16}  {} {}",
                         "High (≥90%)".green(),
                         format!("{:>5}", high_conf).green(),
                         format!("({}%)", high_conf * 100 / total.max(1)).dimmed()
                     );
-                    println!("  {:>16}  {} {}",
+                    println!(
+                        "  {:>16}  {} {}",
                         "Medium (70-90%)".yellow(),
                         format!("{:>5}", med_conf).yellow(),
                         format!("({}%)", med_conf * 100 / total.max(1)).dimmed()
                     );
-                    println!("  {:>16}  {} {}",
+                    println!(
+                        "  {:>16}  {} {}",
                         "Low (<70%)".red(),
                         format!("{:>5}", low_conf).red(),
                         format!("({}%)", low_conf * 100 / total.max(1)).dimmed()
@@ -349,17 +446,30 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
 
                     // Sample cleanable paths
                     println!();
-                    println!("  {}", "─── Sample Cleanable Paths ────────────────────────────────".cyan());
+                    println!(
+                        "  {}",
+                        "─── Sample Cleanable Paths ────────────────────────────────".cyan()
+                    );
                     println!();
 
-                    let cleanable: Vec<_> = map.directories.values()
-                        .filter(|d| matches!(d.category, DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact))
+                    let cleanable: Vec<_> = map
+                        .directories
+                        .values()
+                        .filter(|d| {
+                            matches!(
+                                d.category,
+                                DirectoryCategory::Ephemeral | DirectoryCategory::BuildArtifact
+                            )
+                        })
                         .filter(|d| d.confidence >= 0.8)
                         .take(8)
                         .collect();
 
                     if cleanable.is_empty() {
-                        println!("  {}", "No high-confidence cleanable directories found.".dimmed());
+                        println!(
+                            "  {}",
+                            "No high-confidence cleanable directories found.".dimmed()
+                        );
                     } else {
                         for dir in cleanable {
                             let path_str = dir.path.to_string_lossy();
@@ -370,7 +480,8 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                             };
 
                             let tag = dir.tags.first().map(|s| s.as_str()).unwrap_or("");
-                            println!("  {} {:55} {}",
+                            println!(
+                                "  {} {:55} {}",
                                 "•".green(),
                                 display_path,
                                 format!("[{}]", tag).dimmed()
@@ -388,75 +499,88 @@ fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
                 }
             }
         }
-        MapAction::Verify => {
-            match FileSystemMap::load() {
-                Ok(mut map) => {
-                    println!();
-                    println!("  {}", "Verifying filesystem map...".cyan());
+        MapAction::Verify => match FileSystemMap::load() {
+            Ok(mut map) => {
+                println!();
+                println!("  {}", "Verifying filesystem map...".cyan());
 
-                    let total_dirs = map.directories.len();
-                    let invalid: Vec<_> = map.directories.iter()
-                        .filter(|(path, _)| !path.exists())
-                        .map(|(path, _)| path.clone())
-                        .collect();
+                let total_dirs = map.directories.len();
+                let invalid: Vec<_> = map
+                    .directories
+                    .iter()
+                    .filter(|(path, _)| !path.exists())
+                    .map(|(path, _)| path.clone())
+                    .collect();
 
-                    if invalid.is_empty() {
-                        println!("  {}", "✓ All directories still exist.".green());
-                    } else {
-                        println!("  {} {} invalid entries", "Found".yellow(), invalid.len());
+                if invalid.is_empty() {
+                    println!("  {}", "✓ All directories still exist.".green());
+                } else {
+                    println!("  {} {} invalid entries", "Found".yellow(), invalid.len());
 
-                        map.cleanup_invalid();
-                        map.save()?;
+                    map.cleanup_invalid();
+                    map.save()?;
 
-                        println!("  {} Removed {} entries, {} remain.",
-                            "✓".green(),
-                            invalid.len(),
-                            total_dirs - invalid.len()
-                        );
-                    }
-                    println!();
+                    println!(
+                        "  {} Removed {} entries, {} remain.",
+                        "✓".green(),
+                        invalid.len(),
+                        total_dirs - invalid.len()
+                    );
                 }
-                Err(e) => {
-                    println!("{}", format!("No filesystem map found: {}", e).yellow());
-                }
+                println!();
             }
-        }
-        MapAction::Suggest => {
-            match FileSystemMap::load() {
-                Ok(map) => {
-                    println!();
-                    println!("  {}", "─── Whitelist Suggestions ─────────────────────────────────".cyan());
-                    println!();
-
-                    let whitelist = types::WhitelistConfig::load()?;
-
-                    let suggestions: Vec<_> = map.directories.values()
-                        .filter(|d| {
-                            d.confidence >= 0.95 &&
-                            !whitelist.contains(&d.path) &&
-                            matches!(d.category, DirectoryCategory::System | DirectoryCategory::UserContent)
-                        })
-                        .collect();
-
-                    if suggestions.is_empty() {
-                        println!("  {}", "No suggestions - your whitelist looks comprehensive!".green());
-                    } else {
-                        println!("  Found {} directories that should probably be protected:\n", suggestions.len());
-
-                        for dir in suggestions.iter().take(10) {
-                            println!("  {} {}", "→".yellow(), dir.path.display());
-                        }
-
-                        println!();
-                        println!("  Add with: {}", "cleanser whitelist add <path>".cyan());
-                    }
-                    println!();
-                }
-                Err(e) => {
-                    println!("{}", format!("No filesystem map found: {}", e).yellow());
-                }
+            Err(e) => {
+                println!("{}", format!("No filesystem map found: {}", e).yellow());
             }
-        }
+        },
+        MapAction::Suggest => match FileSystemMap::load() {
+            Ok(map) => {
+                println!();
+                println!(
+                    "  {}",
+                    "─── Whitelist Suggestions ─────────────────────────────────".cyan()
+                );
+                println!();
+
+                let whitelist = types::WhitelistConfig::load()?;
+
+                let suggestions: Vec<_> = map
+                    .directories
+                    .values()
+                    .filter(|d| {
+                        d.confidence >= 0.95
+                            && !whitelist.contains(&d.path)
+                            && matches!(
+                                d.category,
+                                DirectoryCategory::System | DirectoryCategory::UserContent
+                            )
+                    })
+                    .collect();
+
+                if suggestions.is_empty() {
+                    println!(
+                        "  {}",
+                        "No suggestions - your whitelist looks comprehensive!".green()
+                    );
+                } else {
+                    println!(
+                        "  Found {} directories that should probably be protected:\n",
+                        suggestions.len()
+                    );
+
+                    for dir in suggestions.iter().take(10) {
+                        println!("  {} {}", "→".yellow(), dir.path.display());
+                    }
+
+                    println!();
+                    println!("  Add with: {}", "cleanser whitelist add <path>".cyan());
+                }
+                println!();
+            }
+            Err(e) => {
+                println!("{}", format!("No filesystem map found: {}", e).yellow());
+            }
+        },
     }
 
     Ok(())
@@ -489,27 +613,45 @@ fn main() -> anyhow::Result<()> {
 
             // Build ignore list from command line arguments
             let mut ignore_patterns = types::IgnoreList::new();
-            
+
             // Load whitelist and add to ignore patterns
             match types::WhitelistConfig::load() {
                 Ok(whitelist) => {
                     for path in whitelist.list_paths() {
                         if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
-                            eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "Warning: Could not add whitelisted path '{}': {}",
+                                    path.display(),
+                                    e
+                                )
+                                .yellow()
+                            );
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                    eprintln!(
+                        "{}",
+                        format!("Warning: Could not load whitelist: {}", e).yellow()
+                    );
                 }
             }
-            
+
             // Add command-line ignore patterns
             for ignore_path in ignore {
                 match ignore_patterns.add_pattern(&ignore_path) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
-                        eprintln!("{}", format!("Warning: Could not add ignore pattern '{}': {}", ignore_path, e).yellow());
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Warning: Could not add ignore pattern '{}': {}",
+                                ignore_path, e
+                            )
+                            .yellow()
+                        );
                     }
                 }
             }
@@ -519,7 +661,10 @@ fn main() -> anyhow::Result<()> {
                 match types::SizeRange::parse(&range_str) {
                     Ok(range) => Some(range),
                     Err(e) => {
-                        eprintln!("{}", format!("Error: Invalid size range '{}': {}", range_str, e).red());
+                        eprintln!(
+                            "{}",
+                            format!("Error: Invalid size range '{}': {}", range_str, e).red()
+                        );
                         return Err(e);
                     }
                 }
@@ -530,27 +675,33 @@ fn main() -> anyhow::Result<()> {
             // Parse age criteria if provided
             let parsed_age_criteria = if older_than.is_some() || newer_than.is_some() {
                 let mut criteria = types::AgeCriteria::new();
-                
+
                 if let Some(older_str) = older_than {
                     match types::parse_duration(&older_str) {
                         Ok(duration) => criteria.set_older_than(duration),
                         Err(e) => {
-                            eprintln!("{}", format!("Error: Invalid duration '{}': {}", older_str, e).red());
+                            eprintln!(
+                                "{}",
+                                format!("Error: Invalid duration '{}': {}", older_str, e).red()
+                            );
                             return Err(e);
                         }
                     }
                 }
-                
+
                 if let Some(newer_str) = newer_than {
                     match types::parse_duration(&newer_str) {
                         Ok(duration) => criteria.set_newer_than(duration),
                         Err(e) => {
-                            eprintln!("{}", format!("Error: Invalid duration '{}': {}", newer_str, e).red());
+                            eprintln!(
+                                "{}",
+                                format!("Error: Invalid duration '{}': {}", newer_str, e).red()
+                            );
                             return Err(e);
                         }
                     }
                 }
-                
+
                 Some(criteria)
             } else {
                 None
@@ -591,21 +742,33 @@ fn main() -> anyhow::Result<()> {
                 if selected_items.is_empty() {
                     println!("No items selected for deletion");
                 } else {
-                    println!("\n{}", format!("Deleting {} selected items...", selected_items.len()).cyan());
+                    println!(
+                        "\n{}",
+                        format!("Deleting {} selected items...", selected_items.len()).cyan()
+                    );
 
                     let mut deleted_count = 0;
                     let mut failed_count = 0;
                     let mut deleted_paths: Vec<PathBuf> = Vec::new();
 
                     for item in &selected_items {
-                        match std::fs::remove_dir_all(&item.path).or_else(|_| std::fs::remove_file(&item.path)) {
+                        match std::fs::remove_dir_all(&item.path)
+                            .or_else(|_| std::fs::remove_file(&item.path))
+                        {
                             Ok(_) => {
-                                println!("{}", format!("✓ Deleted: {}", item.path.display()).green());
+                                println!(
+                                    "{}",
+                                    format!("✓ Deleted: {}", item.path.display()).green()
+                                );
                                 deleted_count += 1;
                                 deleted_paths.push(item.path.clone());
                             }
                             Err(e) => {
-                                eprintln!("{}", format!("✗ Failed to delete {}: {}", item.path.display(), e).red());
+                                eprintln!(
+                                    "{}",
+                                    format!("✗ Failed to delete {}: {}", item.path.display(), e)
+                                        .red()
+                                );
                                 failed_count += 1;
                             }
                         }
@@ -672,10 +835,17 @@ fn main() -> anyhow::Result<()> {
                                 } else {
                                     println!(
                                         "{}",
-                                        format!("Using cached scan results from {} seconds ago", secs).cyan()
+                                        format!(
+                                            "Using cached scan results from {} seconds ago",
+                                            secs
+                                        )
+                                        .cyan()
                                     );
                                 }
-                                println!("{}", "Tip: Use --force-scan to run a fresh scan".dimmed());
+                                println!(
+                                    "{}",
+                                    "Tip: Use --force-scan to run a fresh scan".dimmed()
+                                );
                             }
                             cached_results
                         }
@@ -687,13 +857,19 @@ fn main() -> anyhow::Result<()> {
                             match types::WhitelistConfig::load() {
                                 Ok(whitelist) => {
                                     for path in whitelist.list_paths() {
-                                        if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                                        if let Err(e) =
+                                            ignore_patterns.add_pattern(&path.to_string_lossy())
+                                        {
                                             eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                                    eprintln!(
+                                        "{}",
+                                        format!("Warning: Could not load whitelist: {}", e)
+                                            .yellow()
+                                    );
                                 }
                             }
 
@@ -724,7 +900,8 @@ fn main() -> anyhow::Result<()> {
                         Err(e) => {
                             println!(
                                 "{}",
-                                format!("Failed to load cache ({}), running fresh scan...", e).yellow()
+                                format!("Failed to load cache ({}), running fresh scan...", e)
+                                    .yellow()
                             );
 
                             // Load whitelist
@@ -732,13 +909,19 @@ fn main() -> anyhow::Result<()> {
                             match types::WhitelistConfig::load() {
                                 Ok(whitelist) => {
                                     for path in whitelist.list_paths() {
-                                        if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                                        if let Err(e) =
+                                            ignore_patterns.add_pattern(&path.to_string_lossy())
+                                        {
                                             eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                                    eprintln!(
+                                        "{}",
+                                        format!("Warning: Could not load whitelist: {}", e)
+                                            .yellow()
+                                    );
                                 }
                             }
 
@@ -775,13 +958,25 @@ fn main() -> anyhow::Result<()> {
                     match types::WhitelistConfig::load() {
                         Ok(whitelist) => {
                             for path in whitelist.list_paths() {
-                                if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
-                                    eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
+                                if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy())
+                                {
+                                    eprintln!(
+                                        "{}",
+                                        format!(
+                                            "Warning: Could not add whitelisted path '{}': {}",
+                                            path.display(),
+                                            e
+                                        )
+                                        .yellow()
+                                    );
                                 }
                             }
                         }
                         Err(e) => {
-                            eprintln!("{}", format!("Warning: Could not load whitelist: {}", e).yellow());
+                            eprintln!(
+                                "{}",
+                                format!("Warning: Could not load whitelist: {}", e).yellow()
+                            );
                         }
                     }
 
@@ -811,14 +1006,16 @@ fn main() -> anyhow::Result<()> {
                 };
 
                 // Filter items based on risk level
-                let filtered_items: Vec<_> = results.items.iter()
+                let filtered_items: Vec<_> = results
+                    .items
+                    .iter()
                     .filter(|item| {
                         match risk {
                             types::RiskLevel::Safe => item.risk_level == types::RiskLevel::Safe,
                             types::RiskLevel::Moderate => {
-                                item.risk_level == types::RiskLevel::Safe ||
-                                item.risk_level == types::RiskLevel::Moderate
-                            },
+                                item.risk_level == types::RiskLevel::Safe
+                                    || item.risk_level == types::RiskLevel::Moderate
+                            }
                             types::RiskLevel::Risky => true, // All risk levels
                         }
                     })
@@ -830,7 +1027,11 @@ fn main() -> anyhow::Result<()> {
                     return Ok(());
                 }
 
-                println!("\nFound {} files matching risk level: {}", filtered_items.len(), risk);
+                println!(
+                    "\nFound {} files matching risk level: {}",
+                    filtered_items.len(),
+                    risk
+                );
 
                 // Create a ScanResults with filtered items for the TUI
                 let filtered_results = types::ScanResults {
@@ -854,7 +1055,10 @@ fn main() -> anyhow::Result<()> {
                         return Ok(());
                     }
 
-                    println!("\n{}", format!("Deleting {} selected items...", selected_items.len()).cyan());
+                    println!(
+                        "\n{}",
+                        format!("Deleting {} selected items...", selected_items.len()).cyan()
+                    );
 
                     let mut deleted_count = 0;
                     let mut failed_count = 0;
@@ -869,12 +1073,19 @@ fn main() -> anyhow::Result<()> {
 
                         match result {
                             Ok(_) => {
-                                println!("{}", format!("✓ Deleted: {}", item.path.display()).green());
+                                println!(
+                                    "{}",
+                                    format!("✓ Deleted: {}", item.path.display()).green()
+                                );
                                 deleted_count += 1;
                                 deleted_paths.push(item.path.clone());
                             }
                             Err(e) => {
-                                eprintln!("{}", format!("✗ Failed to delete {}: {}", item.path.display(), e).red());
+                                eprintln!(
+                                    "{}",
+                                    format!("✗ Failed to delete {}: {}", item.path.display(), e)
+                                        .red()
+                                );
                                 failed_count += 1;
                             }
                         }
@@ -912,17 +1123,26 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Whitelist { action } => {
             let mut config = types::WhitelistConfig::load()?;
-            
+
             match action {
                 WhitelistAction::Add { path } => {
                     config.add_path(path.clone())?;
-                    println!("{}", format!("Added '{}' to whitelist", path.display()).green());
+                    println!(
+                        "{}",
+                        format!("Added '{}' to whitelist", path.display()).green()
+                    );
                 }
                 WhitelistAction::Remove { path } => {
                     if config.remove_path(&path)? {
-                        println!("{}", format!("Removed '{}' from whitelist", path.display()).green());
+                        println!(
+                            "{}",
+                            format!("Removed '{}' from whitelist", path.display()).green()
+                        );
                     } else {
-                        println!("{}", format!("Path '{}' not found in whitelist", path.display()).yellow());
+                        println!(
+                            "{}",
+                            format!("Path '{}' not found in whitelist", path.display()).yellow()
+                        );
                     }
                 }
                 WhitelistAction::List => {
@@ -938,37 +1158,31 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::Cache { action } => {
-            match action {
-                CacheAction::Clear => {
-                    match cache::clear_cache() {
-                        Ok(_) => println!("{}", "Cache cleared successfully".green()),
-                        Err(e) => println!("{}", format!("Failed to clear cache: {}", e).red()),
+        Commands::Cache { action } => match action {
+            CacheAction::Clear => match cache::clear_cache() {
+                Ok(_) => println!("{}", "Cache cleared successfully".green()),
+                Err(e) => println!("{}", format!("Failed to clear cache: {}", e).red()),
+            },
+            CacheAction::Show => match cache::get_cache_age() {
+                Ok(Some(age)) => {
+                    let mins = age / 60;
+                    let secs = age % 60;
+                    if mins > 0 {
+                        println!("Cache age: {} min {} sec", mins, secs);
+                    } else {
+                        println!("Cache age: {} seconds", secs);
                     }
-                }
-                CacheAction::Show => {
-                    match cache::get_cache_age() {
-                        Ok(Some(age)) => {
-                            let mins = age / 60;
-                            let secs = age % 60;
-                            if mins > 0 {
-                                println!("Cache age: {} min {} sec", mins, secs);
-                            } else {
-                                println!("Cache age: {} seconds", secs);
-                            }
 
-                            if let Ok(Some(results)) = cache::load_scan_results(None) {
-                                let total_size: u64 = results.items.iter().map(|i| i.size).sum();
-                                println!("Cached items: {}", results.items.len());
-                                println!("Total size: {}", format_size(total_size, BINARY));
-                            }
-                        }
-                        Ok(None) => println!("{}", "No cache found".yellow()),
-                        Err(e) => println!("{}", format!("Error reading cache: {}", e).red()),
+                    if let Ok(Some(results)) = cache::load_scan_results(None) {
+                        let total_size: u64 = results.items.iter().map(|i| i.size).sum();
+                        println!("Cached items: {}", results.items.len());
+                        println!("Total size: {}", format_size(total_size, BINARY));
                     }
                 }
-            }
-        }
+                Ok(None) => println!("{}", "No cache found".yellow()),
+                Err(e) => println!("{}", format!("Error reading cache: {}", e).red()),
+            },
+        },
         Commands::Map { action } => {
             handle_map_command(action)?;
         }

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::path::{Path, PathBuf};
-use std::fs;
 use anyhow::Result;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use super::Platform;
 
@@ -15,9 +15,15 @@ pub fn is_likely_cache_dir(path: &Path) -> bool {
         .unwrap_or_default();
 
     // Check common cache directory names
-    let cache_names = vec![
-        "cache", "caches", "tmp", "temp", "temporary",
-        ".cache", "_cache", "cacache",
+    let cache_names = [
+        "cache",
+        "caches",
+        "tmp",
+        "temp",
+        "temporary",
+        ".cache",
+        "_cache",
+        "cacache",
     ];
 
     cache_names.iter().any(|&cache| name_lower.contains(cache))
@@ -31,7 +37,7 @@ pub fn is_likely_log_dir(path: &Path) -> bool {
         .map(|s| s.to_lowercase())
         .unwrap_or_default();
 
-    let log_names = vec!["log", "logs", ".log", "_logs"];
+    let log_names = ["log", "logs", ".log", "_logs"];
 
     log_names.iter().any(|&log| name_lower.contains(log))
 }
@@ -61,12 +67,18 @@ pub fn is_likely_build_dir(path: &Path) -> bool {
         .and_then(|n| n.to_str())
         .unwrap_or_default();
 
-    let build_names = vec![
-        "target", "build", "dist", "out", "_build",
-        ".next", ".nuxt", "__pycache__",
+    let build_names = [
+        "target",
+        "build",
+        "dist",
+        "out",
+        "_build",
+        ".next",
+        ".nuxt",
+        "__pycache__",
     ];
 
-    build_names.iter().any(|&build| name == build)
+    build_names.contains(&name)
 }
 
 /// Detect if a directory is node_modules
@@ -79,7 +91,7 @@ pub fn is_node_modules(path: &Path) -> bool {
 
 /// Detect if a path contains a project root indicator
 pub fn has_project_indicator(dir: &Path) -> bool {
-    let indicators = vec![
+    let indicators = [
         "package.json",
         "Cargo.toml",
         "go.mod",
@@ -90,7 +102,9 @@ pub fn has_project_indicator(dir: &Path) -> bool {
         ".git",
     ];
 
-    indicators.iter().any(|&indicator| dir.join(indicator).exists())
+    indicators
+        .iter()
+        .any(|&indicator| dir.join(indicator).exists())
 }
 
 /// Detect common package managers installed on the system
@@ -98,7 +112,7 @@ pub fn detect_package_managers() -> Vec<String> {
     let mut managers = Vec::new();
 
     // Check for common package managers in PATH
-    let pm_commands = vec![
+    let pm_commands = [
         ("npm", "npm"),
         ("cargo", "cargo"),
         ("pip", "pip"),
@@ -121,11 +135,15 @@ pub fn detect_package_managers() -> Vec<String> {
 
 /// Simple check if a command exists in PATH
 fn which_exists(command: &str) -> bool {
-    std::process::Command::new(if cfg!(target_os = "windows") { "where" } else { "which" })
-        .arg(command)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    std::process::Command::new(if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    })
+    .arg(command)
+    .output()
+    .map(|output| output.status.success())
+    .unwrap_or(false)
 }
 
 /// Detect browser cache directories

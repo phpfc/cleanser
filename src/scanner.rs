@@ -1,5 +1,5 @@
-use crate::mapper::{FileSystemCrawler, FileSystemMap};
 use crate::mapper::filesystem_map::{DirectoryCategory, MappedDirectory};
+use crate::mapper::{FileSystemCrawler, FileSystemMap};
 use crate::types::*;
 use anyhow::Result;
 use colored::Colorize;
@@ -19,7 +19,10 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
 
     // Load or create filesystem map
     let mut fs_map = FileSystemMap::load().unwrap_or_else(|_| {
-        println!("{}", "No filesystem map found. Creating initial map...".yellow());
+        println!(
+            "{}",
+            "No filesystem map found. Creating initial map...".yellow()
+        );
         FileSystemMap::new()
     });
 
@@ -41,7 +44,10 @@ pub fn scan(config: ScanConfig) -> Result<ScanResults> {
 
         // Save the updated map
         if let Err(e) = fs_map.save() {
-            eprintln!("{}", format!("Warning: Could not save filesystem map: {}", e).yellow());
+            eprintln!(
+                "{}",
+                format!("Warning: Could not save filesystem map: {}", e).yellow()
+            );
         }
     }
 
@@ -174,7 +180,8 @@ fn map_to_cleanable_item(mapped: &MappedDirectory) -> Option<CleanableItem> {
     };
 
     // Only include if significant size
-    if size < 1024 * 1024 { // < 1MB
+    if size < 1024 * 1024 {
+        // < 1MB
         return None;
     }
 
@@ -194,7 +201,8 @@ fn map_to_cleanable_item(mapped: &MappedDirectory) -> Option<CleanableItem> {
         DirectoryCategory::Unknown => return None, // Skip unknown
     };
 
-    let description = format!("{} ({})",
+    let description = format!(
+        "{} ({})",
         mapped.description(),
         mapped.path.file_name()?.to_string_lossy()
     );
@@ -266,7 +274,8 @@ fn check_log_file(path: &Path, log_regex: &Regex) -> Option<CleanableItem> {
         if log_regex.is_match(&name_str) {
             if let Ok(metadata) = fs::metadata(path) {
                 let size = metadata.len();
-                if size > 1024 * 1024 { // > 1MB
+                if size > 1024 * 1024 {
+                    // > 1MB
                     return Some(CleanableItem {
                         path: path.to_path_buf(),
                         size,
@@ -319,7 +328,7 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
                         if let Ok(hash) = hash_file(entry.path()) {
                             file_hashes
                                 .entry(hash)
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(entry.path().to_path_buf());
                         }
                     }
@@ -389,9 +398,9 @@ fn deduplicate_nested_paths(mut items: Vec<CleanableItem>) -> Vec<CleanableItem>
     let mut seen_prefixes = Vec::new();
 
     for item in items {
-        let is_nested = seen_prefixes.iter().any(|prefix: &PathBuf| {
-            item.path.starts_with(prefix)
-        });
+        let is_nested = seen_prefixes
+            .iter()
+            .any(|prefix: &PathBuf| item.path.starts_with(prefix));
 
         if !is_nested {
             seen_prefixes.push(item.path.clone());
@@ -407,9 +416,20 @@ pub fn display_results(results: &ScanResults) {
     use humansize::{format_size, BINARY};
 
     println!();
-    println!("{}", "═══════════════════════════════════════════════════════════".cyan());
-    println!("{}", "                      SCAN RESULTS                         ".cyan().bold());
-    println!("{}", "═══════════════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════════════════".cyan()
+    );
+    println!(
+        "{}",
+        "                      SCAN RESULTS                         "
+            .cyan()
+            .bold()
+    );
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════════════════".cyan()
+    );
     println!();
 
     if results.items.is_empty() {
@@ -421,10 +441,7 @@ pub fn display_results(results: &ScanResults) {
     // Group by category
     let mut by_category: HashMap<CleanCategory, Vec<&CleanableItem>> = HashMap::new();
     for item in &results.items {
-        by_category
-            .entry(item.category.clone())
-            .or_default()
-            .push(item);
+        by_category.entry(item.category).or_default().push(item);
     }
 
     // Sort categories by total size
@@ -444,7 +461,8 @@ pub fn display_results(results: &ScanResults) {
             None => "white",
         };
 
-        println!("  {} {} ({})",
+        println!(
+            "  {} {} ({})",
             format!("{}", category).color(risk_color).bold(),
             format!("({} items)", items.len()).dimmed(),
             format_size(total_size, BINARY).white().bold()
@@ -462,40 +480,41 @@ pub fn display_results(results: &ScanResults) {
                 path_str.to_string()
             };
 
-            println!("    {:>10}  {}",
+            println!(
+                "    {:>10}  {}",
                 format_size(item.size, BINARY).dimmed(),
                 display_path
             );
         }
 
         if items.len() > 5 {
-            println!("    {} {} more...",
-                "".dimmed(),
-                items.len() - 5
-            );
+            println!("    {} {} more...", "".dimmed(), items.len() - 5);
         }
         println!();
     }
 
     // Summary
-    println!("{}", "───────────────────────────────────────────────────────────".cyan());
-    println!("  {} {}",
+    println!(
+        "{}",
+        "───────────────────────────────────────────────────────────".cyan()
+    );
+    println!(
+        "  {} {}",
         "Total cleanable:".white().bold(),
         format_size(results.total_size, BINARY).green().bold()
     );
-    println!("  {} {}",
-        "Items found:".dimmed(),
-        results.items.len()
-    );
+    println!("  {} {}", "Items found:".dimmed(), results.items.len());
 
     if results.filtered_by_size_count > 0 {
-        println!("  {} {}",
+        println!(
+            "  {} {}",
             "Filtered by size:".dimmed(),
             results.filtered_by_size_count
         );
     }
     if results.filtered_by_age_count > 0 {
-        println!("  {} {}",
+        println!(
+            "  {} {}",
             "Filtered by age:".dimmed(),
             results.filtered_by_age_count
         );

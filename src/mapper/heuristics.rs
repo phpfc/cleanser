@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::path::Path;
-use crate::platform::detection::*;
 use super::filesystem_map::{DirectoryCategory, MappedDirectory};
+use crate::platform::detection::*;
+use std::path::Path;
 
 pub struct PathClassifier;
 
@@ -23,7 +23,7 @@ impl PathClassifier {
             category,
             tags,
             estimated_size: 0, // Size calculated during scan, not mapping
-            file_count: 0,      // Count calculated during scan, not mapping
+            file_count: 0,     // Count calculated during scan, not mapping
             last_modified: path
                 .metadata()
                 .ok()
@@ -65,7 +65,6 @@ impl PathClassifier {
                 confidence = 0.75;
             }
         }
-
         // Ephemeral (caches, logs, temp)
         else if Self::is_package_manager_cache(path) {
             category = DirectoryCategory::Ephemeral;
@@ -75,7 +74,11 @@ impl PathClassifier {
         } else if is_likely_cache_dir(path) {
             category = DirectoryCategory::Ephemeral;
             tags.push("cache".to_string());
-            confidence = if Self::has_known_cache_parent(path) { 0.95 } else { 0.80 };
+            confidence = if Self::has_known_cache_parent(path) {
+                0.95
+            } else {
+                0.80
+            };
         } else if is_likely_log_dir(path) {
             category = DirectoryCategory::Ephemeral;
             tags.push("log".to_string());
@@ -85,9 +88,10 @@ impl PathClassifier {
             tags.push("temp".to_string());
             confidence = 0.70;
         }
-
         // Application Data
-        else if path_str.contains("docker") && (path_str.contains("/vms/") || path_str.contains("/data/")) {
+        else if path_str.contains("docker")
+            && (path_str.contains("/vms/") || path_str.contains("/data/"))
+        {
             category = DirectoryCategory::ApplicationData;
             tags.push("docker".to_string());
             if path_str.contains("/vms/") {
@@ -103,13 +107,13 @@ impl PathClassifier {
             category = DirectoryCategory::ApplicationData;
             tags.push("container".to_string());
             confidence = 0.90;
-        } else if path_str.contains("/library/application support/") ||
-                  path_str.contains("/.local/share/") {
+        } else if path_str.contains("/library/application support/")
+            || path_str.contains("/.local/share/")
+        {
             category = DirectoryCategory::ApplicationData;
             tags.push("app-support".to_string());
             confidence = 0.75;
         }
-
         // User Content
         else if name == "downloads" || path_str.ends_with("/downloads") {
             category = DirectoryCategory::UserContent;
@@ -128,10 +132,10 @@ impl PathClassifier {
             tags.push("media".to_string());
             confidence = 0.70;
         }
-
         // System
-        else if path_str.starts_with("/system") ||
-                path_str.starts_with("/library") && !path_str.contains("caches") {
+        else if path_str.starts_with("/system")
+            || path_str.starts_with("/library") && !path_str.contains("caches")
+        {
             category = DirectoryCategory::System;
             tags.push("system".to_string());
             confidence = 0.85;
@@ -215,18 +219,15 @@ impl PathClassifier {
 
     fn has_known_cache_parent(path: &Path) -> bool {
         let path_str = path.to_string_lossy().to_lowercase();
-        let known_parents = vec![
-            "library/caches",
-            ".cache",
-            ".local/share",
-            "appdata/local",
-        ];
-        known_parents.iter().any(|&parent| path_str.contains(parent))
+        let known_parents = ["library/caches", ".cache", ".local/share", "appdata/local"];
+        known_parents
+            .iter()
+            .any(|&parent| path_str.contains(parent))
     }
 
     fn is_package_manager_cache(path: &Path) -> bool {
         let path_str = path.to_string_lossy().to_lowercase();
-        let pm_patterns = vec![
+        let pm_patterns = [
             ".cargo/registry",
             ".cargo/git",
             ".npm/_cacache",
@@ -237,7 +238,9 @@ impl PathClassifier {
             ".cache/pip",
             "homebrew",
         ];
-        pm_patterns.iter().any(|&pattern| path_str.contains(pattern))
+        pm_patterns
+            .iter()
+            .any(|&pattern| path_str.contains(pattern))
     }
 
     fn is_temp_dir(path: &Path) -> bool {
@@ -246,7 +249,7 @@ impl PathClassifier {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_lowercase();
-        let temp_names = vec!["tmp", "temp", "temporary"];
+        let temp_names = ["tmp", "temp", "temporary"];
         temp_names.iter().any(|&temp| name == temp)
     }
 
@@ -256,7 +259,7 @@ impl PathClassifier {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_lowercase();
-        let media_names = vec!["music", "videos", "pictures", "photos", "movies"];
+        let media_names = ["music", "videos", "pictures", "photos", "movies"];
         media_names.iter().any(|&m| name == m)
     }
 }
@@ -278,7 +281,7 @@ mod tests {
     #[test]
     fn test_classify_cache() {
         let path = PathBuf::from("/home/user/.cache/pip");
-        let (category, tags, conf) = PathClassifier::classify_directory(&path);
+        let (category, tags, _conf) = PathClassifier::classify_directory(&path);
         assert_eq!(category, DirectoryCategory::Ephemeral);
         assert!(tags.contains(&"cache".to_string()));
         assert!(tags.contains(&"pip".to_string()));

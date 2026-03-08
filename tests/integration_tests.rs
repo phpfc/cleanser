@@ -22,7 +22,7 @@ fn create_test_structure() -> TempDir {
     // Create Rust target directory with Cargo.toml
     fs::write(base_path.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
     fs::create_dir_all(base_path.join("target/debug")).unwrap();
-    fs::write(base_path.join("target/debug/test"), &vec![0u8; 1024]).unwrap();
+    fs::write(base_path.join("target/debug/test"), vec![0u8; 1024]).unwrap();
 
     // Create log files
     fs::create_dir_all(base_path.join("logs")).unwrap();

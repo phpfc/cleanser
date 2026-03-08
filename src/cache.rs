@@ -118,7 +118,9 @@ pub fn update_cache_after_deletion(deleted_paths: &[PathBuf]) -> Result<()> {
     // Remove deleted items from cache
     let original_count = cached.results.items.len();
     cached.results.items.retain(|item: &CleanableItem| {
-        !deleted_paths.iter().any(|deleted_path| deleted_path == &item.path)
+        !deleted_paths
+            .iter()
+            .any(|deleted_path| deleted_path == &item.path)
     });
 
     let removed_count = original_count - cached.results.items.len();

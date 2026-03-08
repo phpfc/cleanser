@@ -2,17 +2,17 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 
+use anyhow::Result;
+use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
-use rayon::prelude::*;
-use anyhow::Result;
-use indicatif::{ProgressBar, ProgressStyle};
 
+use super::filesystem_map::{DirectoryCategory, FileSystemMap};
+use super::heuristics::PathClassifier;
 use crate::platform::{paths, Platform};
 use crate::types::WhitelistConfig;
-use super::filesystem_map::{FileSystemMap, DirectoryCategory};
-use super::heuristics::PathClassifier;
 
 pub struct FileSystemCrawler {
     platform: Platform,
@@ -121,11 +121,7 @@ impl FileSystemCrawler {
     }
 
     /// Crawl a specific directory using smart recursive approach
-    fn crawl_directory(
-        &self,
-        dir: &Path,
-        map: &Arc<Mutex<FileSystemMap>>,
-    ) -> Result<()> {
+    fn crawl_directory(&self, dir: &Path, map: &Arc<Mutex<FileSystemMap>>) -> Result<()> {
         self.crawl_directory_recursive(dir, map, 0)
     }
 
@@ -147,7 +143,7 @@ impl FileSystemCrawler {
         }
 
         // Skip protected directories
-        if paths::is_protected_path(&dir.to_path_buf()) {
+        if paths::is_protected_path(dir) {
             return Ok(());
         }
 
@@ -161,10 +157,9 @@ impl FileSystemCrawler {
 
             // SMART STOP: Only stop descending into specific categories
             // Stop at build artifacts (we don't need to scan inside node_modules, target, etc.)
-            if classified.confidence >= 0.8 && matches!(
-                classified.category,
-                DirectoryCategory::BuildArtifact
-            ) {
+            if classified.confidence >= 0.8
+                && matches!(classified.category, DirectoryCategory::BuildArtifact)
+            {
                 return Ok(());
             }
         }
@@ -180,8 +175,12 @@ impl FileSystemCrawler {
                     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                         if name.starts_with('.') {
                             let name_lower = name.to_lowercase();
-                            return ["cache", "local", "config", "npm", "cargo", "gradle", "m2", "flutter", "dart"].iter()
-                                .any(|&s| name_lower.contains(s));
+                            return [
+                                "cache", "local", "config", "npm", "cargo", "gradle", "m2",
+                                "flutter", "dart",
+                            ]
+                            .iter()
+                            .any(|&s| name_lower.contains(s));
                         }
                     }
                     true
@@ -234,17 +233,9 @@ impl FileSystemCrawler {
         // Only scan well-known cache/temp locations
         if let Some(home) = dirs::home_dir() {
             let quick_dirs = match self.platform {
-                Platform::MacOS => vec![
-                    home.join("Library/Caches"),
-                    home.join("Library/Logs"),
-                ],
-                Platform::Linux => vec![
-                    home.join(".cache"),
-                    home.join(".local/share"),
-                ],
-                Platform::Windows => vec![
-                    home.join("AppData\\Local\\Temp"),
-                ],
+                Platform::MacOS => vec![home.join("Library/Caches"), home.join("Library/Logs")],
+                Platform::Linux => vec![home.join(".cache"), home.join(".local/share")],
+                Platform::Windows => vec![home.join("AppData\\Local\\Temp")],
             };
 
             for dir in quick_dirs {

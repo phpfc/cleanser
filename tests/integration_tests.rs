@@ -154,16 +154,10 @@ fn test_dry_run_does_not_delete() {
     let results = scan(config).expect("Scan should succeed");
 
     // Verify items were found (scanner worked)
-    assert!(
-        !results.items.is_empty(),
-        "Should find cleanable items"
-    );
+    assert!(!results.items.is_empty(), "Should find cleanable items");
 
     // Verify files still exist (scan doesn't delete)
-    assert!(
-        cache_path.exists(),
-        "Cache should still exist after scan"
-    );
+    assert!(cache_path.exists(), "Cache should still exist after scan");
     assert!(
         node_modules_path.exists(),
         "node_modules should still exist after scan"
@@ -185,7 +179,9 @@ fn test_ignore_list_functionality() {
     // Test that IgnoreList correctly identifies patterns to ignore
     // IgnoreList uses path.starts_with() for matching
     let mut ignore_patterns = IgnoreList::new();
-    ignore_patterns.add_pattern("/home/user/node_modules").unwrap();
+    ignore_patterns
+        .add_pattern("/home/user/node_modules")
+        .unwrap();
     ignore_patterns.add_pattern("/var/log").unwrap();
 
     // Test the pattern matching directly - should_ignore checks if path starts with pattern

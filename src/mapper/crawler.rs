@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_mut)]
-
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::{Path, PathBuf};
@@ -71,7 +68,7 @@ impl FileSystemCrawler {
 
     /// Perform initial full filesystem crawl
     pub fn crawl_full(&self) -> Result<FileSystemMap> {
-        let mut map = FileSystemMap::new();
+        let map = FileSystemMap::new();
 
         if let Some(pb) = &self.progress {
             pb.set_message("Starting filesystem scan...");
@@ -146,7 +143,7 @@ impl FileSystemCrawler {
         }
 
         // Classify and add ALL directories to the map
-        if let Some(mut classified) = PathClassifier::classify(dir) {
+        if let Some(classified) = PathClassifier::classify(dir) {
             // Add all directories regardless of confidence
             {
                 let mut map_lock = map.lock().unwrap();

@@ -283,7 +283,7 @@ fn parse_size_with_unit(input: &str) -> anyhow::Result<u64> {
 
 // ===== Age-Based Filtering =====
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AgeCriteria {
     pub older_than: Option<Duration>,
     pub newer_than: Option<Duration>,
@@ -291,10 +291,7 @@ pub struct AgeCriteria {
 
 impl AgeCriteria {
     pub fn new() -> Self {
-        Self {
-            older_than: None,
-            newer_than: None,
-        }
+        Self::default()
     }
 
     pub fn set_older_than(&mut self, duration: Duration) {

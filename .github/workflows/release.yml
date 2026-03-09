@@ -147,7 +147,7 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-windows, build-gui-macos, build-gui-linux, build-gui-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,7 +160,18 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           body: |
-            ## Installation
+            ## 🖥️ GUI Application (Desktop)
+
+            Download the desktop application with graphical interface:
+
+            | Platform | Architecture | File |
+            |----------|--------------|------|
+            | macOS | Intel | `Cleanser-${{ steps.get_version.outputs.version }}-x86_64-apple-darwin.dmg` |
+            | macOS | Apple Silicon | `Cleanser-${{ steps.get_version.outputs.version }}-aarch64-apple-darwin.dmg` |
+            | Linux | x86_64 | `Cleanser-${{ steps.get_version.outputs.version }}-x86_64.AppImage` or `cleanser-gui_${{ steps.get_version.outputs.version }}_amd64.deb` |
+            | Windows | x86_64 | `Cleanser-${{ steps.get_version.outputs.version }}-x64-setup.exe` |
+
+            ## ⌨️ CLI Tool (Command Line)
 
             ### Homebrew (macOS)
             ```bash
@@ -174,7 +185,7 @@ jobs:
             ```
 
             ### Manual Installation
-            Download the appropriate binary for your system:
+            Download the CLI binary for your system:
 
             | Platform | Architecture | File |
             |----------|--------------|------|
@@ -189,7 +200,7 @@ jobs:
 
   update-landing:
     name: Update Landing Page Downloads
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-windows, build-gui-macos, build-gui-linux, build-gui-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Get version from tag
@@ -213,12 +224,39 @@ jobs:
         run: |
           rm -rf landing/downloads
           mv downloads landing/
+          VERSION="${{ steps.get_version.outputs.version }}"
 
-          # Create downloads.json with version info
+          # Create downloads.json with version info and categorized files
           cat > landing/downloads/index.json << EOF
           {
-            "version": "${{ steps.get_version.outputs.version }}",
+            "version": "${VERSION}",
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "gui": {
+              "macos": {
+                "intel": "Cleanser-${VERSION}-x86_64-apple-darwin.dmg",
+                "arm": "Cleanser-${VERSION}-aarch64-apple-darwin.dmg"
+              },
+              "linux": {
+                "appimage": "Cleanser-${VERSION}-x86_64.AppImage",
+                "deb": "cleanser-gui_${VERSION}_amd64.deb"
+              },
+              "windows": {
+                "installer": "Cleanser-${VERSION}-x64-setup.exe"
+              }
+            },
+            "cli": {
+              "macos": {
+                "intel": "cleanser-${VERSION}-x86_64-apple-darwin.tar.gz",
+                "arm": "cleanser-${VERSION}-aarch64-apple-darwin.tar.gz"
+              },
+              "linux": {
+                "x86_64": "cleanser-${VERSION}-x86_64-unknown-linux-gnu.tar.gz",
+                "arm64": "cleanser-${VERSION}-aarch64-unknown-linux-gnu.tar.gz"
+              },
+              "windows": {
+                "x86_64": "cleanser-${VERSION}-x86_64-pc-windows-msvc.zip"
+              }
+            },
             "files": $(ls -1 landing/downloads | grep -v index.json | jq -R -s -c 'split("\n") | map(select(length > 0))')
           }
           EOF
@@ -233,6 +271,202 @@ jobs:
           git add downloads/
           git commit -m "Update downloads to v${{ steps.get_version.outputs.version }}"
           git push
+
+  # ===========================================================================
+  # GUI Builds (Tauri)
+  # ===========================================================================
+
+  build-gui-macos:
+    name: Build GUI macOS
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            arch: x64
+          - target: aarch64-apple-darwin
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        run: |
+          cd crates/cleanser-gui/ui
+          npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: crates/cleanser-gui
+          args: --target ${{ matrix.target }}
+
+      - name: Rename and upload DMG
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          TARGET="${{ matrix.target }}"
+
+          # Find the DMG file
+          DMG_FILE=$(find crates/cleanser-gui/target/$TARGET/release/bundle/dmg -name "*.dmg" | head -1)
+
+          if [ -n "$DMG_FILE" ]; then
+            NEW_NAME="Cleanser-${VERSION}-${TARGET}.dmg"
+            cp "$DMG_FILE" "$NEW_NAME"
+            shasum -a 256 "$NEW_NAME" > "${NEW_NAME}.sha256"
+          fi
+
+      - name: Upload DMG to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Cleanser-*.dmg
+            Cleanser-*.dmg.sha256
+
+  build-gui-linux:
+    name: Build GUI Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: |
+          cd crates/cleanser-gui/ui
+          npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: crates/cleanser-gui
+
+      - name: Rename and prepare packages
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+
+          # Find and rename .deb
+          DEB_FILE=$(find crates/cleanser-gui/target/release/bundle/deb -name "*.deb" | head -1)
+          if [ -n "$DEB_FILE" ]; then
+            NEW_DEB="cleanser-gui_${VERSION}_amd64.deb"
+            cp "$DEB_FILE" "$NEW_DEB"
+            sha256sum "$NEW_DEB" > "${NEW_DEB}.sha256"
+          fi
+
+          # Find and rename .AppImage
+          APPIMAGE_FILE=$(find crates/cleanser-gui/target/release/bundle/appimage -name "*.AppImage" | head -1)
+          if [ -n "$APPIMAGE_FILE" ]; then
+            NEW_APPIMAGE="Cleanser-${VERSION}-x86_64.AppImage"
+            cp "$APPIMAGE_FILE" "$NEW_APPIMAGE"
+            sha256sum "$NEW_APPIMAGE" > "${NEW_APPIMAGE}.sha256"
+          fi
+
+      - name: Upload packages to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            cleanser-gui_*.deb
+            cleanser-gui_*.deb.sha256
+            Cleanser-*.AppImage
+            Cleanser-*.AppImage.sha256
+
+  build-gui-windows:
+    name: Build GUI Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        run: |
+          cd crates/cleanser-gui/ui
+          npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: crates/cleanser-gui
+
+      - name: Rename and prepare installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.version }}"
+
+          # Find the NSIS installer
+          $nsis = Get-ChildItem -Path "crates/cleanser-gui/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          if ($nsis) {
+            $newName = "Cleanser-${version}-x64-setup.exe"
+            Copy-Item $nsis.FullName $newName
+            $hash = (Get-FileHash -Algorithm SHA256 $newName).Hash.ToLower()
+            "$hash  $newName" | Out-File -Encoding utf8 "${newName}.sha256"
+          }
+
+          # Find the MSI installer (if generated)
+          $msi = Get-ChildItem -Path "crates/cleanser-gui/target/release/bundle/msi" -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($msi) {
+            $newMsiName = "Cleanser-${version}-x64.msi"
+            Copy-Item $msi.FullName $newMsiName
+            $hash = (Get-FileHash -Algorithm SHA256 $newMsiName).Hash.ToLower()
+            "$hash  $newMsiName" | Out-File -Encoding utf8 "${newMsiName}.sha256"
+          }
+
+      - name: Upload installer to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Cleanser-*-setup.exe
+            Cleanser-*-setup.exe.sha256
+            Cleanser-*.msi
+            Cleanser-*.msi.sha256
+
+  # ===========================================================================
+  # Homebrew
+  # ===========================================================================
 
   build-bottle:
     name: Build Homebrew Bottle

@@ -43,8 +43,26 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "category": "Utility",
+    "shortDescription": "Disk cleanup utility",
+    "longDescription": "Cleanser is a smart disk cleanup utility that helps you free up disk space by finding and removing cache files, build artifacts, and other temporary files.",
     "macOS": {
       "minimumSystemVersion": "10.15"
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": true,
+        "languages": ["English", "PortugueseBR"]
+      }
     }
   }
 }

@@ -8,9 +8,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const CACHE_DIR: &str = ".cache/cleanser";
 const CACHE_FILE: &str = "last-scan.json";
 const CACHE_MAX_AGE_SECS: u64 = 3600; // 1 hour
+const CACHE_VERSION: u32 = 1;
+
+fn default_version() -> u32 {
+    0
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct CachedScan {
+    #[serde(default = "default_version")]
+    pub version: u32,
     pub timestamp: u64,
     pub results: ScanResults,
 }
@@ -33,6 +40,7 @@ pub fn save_scan_results(results: &ScanResults) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let cached = CachedScan {
+        version: CACHE_VERSION,
         timestamp,
         results: results.clone(),
     };
@@ -55,8 +63,14 @@ pub fn load_scan_results(max_age_secs: Option<u64>) -> Result<Option<ScanResults
     let contents = fs::read_to_string(&cache_path)
         .with_context(|| format!("Failed to read cache from {:?}", cache_path))?;
 
-    let cached: CachedScan =
-        serde_json::from_str(&contents).with_context(|| "Failed to parse cached scan results")?;
+    let cached: CachedScan = match serde_json::from_str(&contents) {
+        Ok(c) => c,
+        Err(_) => return Ok(None),
+    };
+
+    if cached.version != CACHE_VERSION {
+        return Ok(None);
+    }
 
     let max_age = max_age_secs.unwrap_or(CACHE_MAX_AGE_SECS);
     let current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -93,7 +107,14 @@ pub fn get_cache_age() -> Result<Option<u64>> {
     }
 
     let contents = fs::read_to_string(&cache_path)?;
-    let cached: CachedScan = serde_json::from_str(&contents)?;
+    let cached: CachedScan = match serde_json::from_str(&contents) {
+        Ok(c) => c,
+        Err(_) => return Ok(None),
+    };
+
+    if cached.version != CACHE_VERSION {
+        return Ok(None);
+    }
 
     let current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
@@ -113,7 +134,13 @@ pub fn update_cache_after_deletion(deleted_paths: &[PathBuf]) -> Result<()> {
     }
 
     let contents = fs::read_to_string(&cache_path)?;
-    let mut cached: CachedScan = serde_json::from_str(&contents)?;
+    let mut cached: CachedScan = match serde_json::from_str(&contents) {
+        Ok(c) => c,
+        Err(_) => return Ok(()),
+    };
+
+    // Ensure version is current when saving
+    cached.version = CACHE_VERSION;
 
     // Remove deleted items from cache
     let original_count = cached.results.items.len();

@@ -159,6 +159,57 @@ enum MapAction {
     Suggest,
 }
 
+/// Run a fresh scan with default settings for the clean command
+fn run_default_scan() -> anyhow::Result<types::ScanResults> {
+    let mut ignore_patterns = types::IgnoreList::new();
+    match types::WhitelistConfig::load() {
+        Ok(whitelist) => {
+            for path in whitelist.list_paths() {
+                if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Warning: Could not add whitelisted path '{}': {}",
+                            path.display(),
+                            e
+                        )
+                        .yellow()
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "{}",
+                format!("Warning: Could not load whitelist: {}", e).yellow()
+            );
+        }
+    }
+
+    let config = types::ScanConfig {
+        speed: types::ScanSpeed::Normal,
+        paths: vec![platform::home_dir_or_err()?],
+        min_file_size_mb: 100,
+        max_depth: Some(6),
+        find_duplicates: false,
+        ignore_patterns,
+        size_range: None,
+        age_criteria: None,
+        interactive_mode: false,
+    };
+
+    let results = scanner::scan(config)?;
+
+    if let Err(e) = cache::save_scan_results(&results) {
+        eprintln!(
+            "{}",
+            format!("Warning: Failed to save scan cache: {}", e).yellow()
+        );
+    }
+
+    Ok(results)
+}
+
 fn handle_map_command(action: MapAction) -> anyhow::Result<()> {
     use mapper::filesystem_map::DirectoryCategory;
     use mapper::{FileSystemCrawler, FileSystemMap};
@@ -851,51 +902,7 @@ fn main() -> anyhow::Result<()> {
                         }
                         Ok(None) => {
                             println!("{}", "No cached scan found, running fresh scan...".cyan());
-
-                            // Load whitelist
-                            let mut ignore_patterns = types::IgnoreList::new();
-                            match types::WhitelistConfig::load() {
-                                Ok(whitelist) => {
-                                    for path in whitelist.list_paths() {
-                                        if let Err(e) =
-                                            ignore_patterns.add_pattern(&path.to_string_lossy())
-                                        {
-                                            eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "{}",
-                                        format!("Warning: Could not load whitelist: {}", e)
-                                            .yellow()
-                                    );
-                                }
-                            }
-
-                            let config = types::ScanConfig {
-                                speed: types::ScanSpeed::Normal,
-                                paths: vec![platform::home_dir_or_err()?],
-                                min_file_size_mb: 100,
-                                max_depth: Some(6),
-                                find_duplicates: false,
-                                ignore_patterns,
-                                size_range: None,
-                                age_criteria: None,
-                                interactive_mode: false,
-                            };
-
-                            let scan_results = scanner::scan(config)?;
-
-                            // Save to cache
-                            if let Err(e) = cache::save_scan_results(&scan_results) {
-                                eprintln!(
-                                    "{}",
-                                    format!("Warning: Failed to save scan cache: {}", e).yellow()
-                                );
-                            }
-
-                            scan_results
+                            run_default_scan()?
                         }
                         Err(e) => {
                             println!(
@@ -903,106 +910,12 @@ fn main() -> anyhow::Result<()> {
                                 format!("Failed to load cache ({}), running fresh scan...", e)
                                     .yellow()
                             );
-
-                            // Load whitelist
-                            let mut ignore_patterns = types::IgnoreList::new();
-                            match types::WhitelistConfig::load() {
-                                Ok(whitelist) => {
-                                    for path in whitelist.list_paths() {
-                                        if let Err(e) =
-                                            ignore_patterns.add_pattern(&path.to_string_lossy())
-                                        {
-                                            eprintln!("{}", format!("Warning: Could not add whitelisted path '{}': {}", path.display(), e).yellow());
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "{}",
-                                        format!("Warning: Could not load whitelist: {}", e)
-                                            .yellow()
-                                    );
-                                }
-                            }
-
-                            let config = types::ScanConfig {
-                                speed: types::ScanSpeed::Normal,
-                                paths: vec![platform::home_dir_or_err()?],
-                                min_file_size_mb: 100,
-                                max_depth: Some(6),
-                                find_duplicates: false,
-                                ignore_patterns,
-                                size_range: None,
-                                age_criteria: None,
-                                interactive_mode: false,
-                            };
-
-                            let scan_results = scanner::scan(config)?;
-
-                            // Save to cache
-                            if let Err(e) = cache::save_scan_results(&scan_results) {
-                                eprintln!(
-                                    "{}",
-                                    format!("Warning: Failed to save scan cache: {}", e).yellow()
-                                );
-                            }
-
-                            scan_results
+                            run_default_scan()?
                         }
                     }
                 } else {
                     println!("{}", "Running fresh scan (--force-scan)...".cyan());
-
-                    // Load whitelist
-                    let mut ignore_patterns = types::IgnoreList::new();
-                    match types::WhitelistConfig::load() {
-                        Ok(whitelist) => {
-                            for path in whitelist.list_paths() {
-                                if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy())
-                                {
-                                    eprintln!(
-                                        "{}",
-                                        format!(
-                                            "Warning: Could not add whitelisted path '{}': {}",
-                                            path.display(),
-                                            e
-                                        )
-                                        .yellow()
-                                    );
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "{}",
-                                format!("Warning: Could not load whitelist: {}", e).yellow()
-                            );
-                        }
-                    }
-
-                    let config = types::ScanConfig {
-                        speed: types::ScanSpeed::Normal,
-                        paths: vec![platform::home_dir_or_err()?],
-                        min_file_size_mb: 100,
-                        max_depth: Some(6),
-                        find_duplicates: false,
-                        ignore_patterns,
-                        size_range: None,
-                        age_criteria: None,
-                        interactive_mode: false,
-                    };
-
-                    let scan_results = scanner::scan(config)?;
-
-                    // Save to cache
-                    if let Err(e) = cache::save_scan_results(&scan_results) {
-                        eprintln!(
-                            "{}",
-                            format!("Warning: Failed to save scan cache: {}", e).yellow()
-                        );
-                    }
-
-                    scan_results
+                    run_default_scan()?
                 };
 
                 // Filter items based on risk level

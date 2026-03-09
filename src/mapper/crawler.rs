@@ -1,10 +1,8 @@
 #![allow(dead_code)]
-#![allow(unused_imports)]
 #![allow(unused_mut)]
 
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
-use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;

@@ -73,7 +73,7 @@ fn run_tui_loop(
     state: &mut TuiState,
 ) -> Result<Vec<FileItem>> {
     loop {
-        terminal.draw(|f| render_ui(f, state))?;
+        terminal.draw(|f| render_ui(f, &mut *state))?;
 
         if let Event::Key(key) = event::read()? {
             match key.code {
@@ -132,7 +132,7 @@ fn run_tui_loop(
     }
 }
 
-fn render_ui(f: &mut Frame, state: &TuiState) {
+fn render_ui(f: &mut Frame, state: &mut TuiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -192,11 +192,11 @@ fn render_header(f: &mut Frame, area: Rect, state: &TuiState) {
     f.render_widget(header, area);
 }
 
-fn render_file_list(f: &mut Frame, area: Rect, state: &TuiState) {
+fn render_file_list(f: &mut Frame, area: Rect, state: &mut TuiState) {
     let visible_height = area.height.saturating_sub(2) as usize; // Account for borders
 
-    // Calculate scroll offset to keep cursor visible
-    let scroll_offset = if state.cursor_position >= state.scroll_offset + visible_height {
+    // Calculate and persist scroll offset to keep cursor visible
+    state.scroll_offset = if state.cursor_position >= state.scroll_offset + visible_height {
         state.cursor_position.saturating_sub(visible_height - 1)
     } else if state.cursor_position < state.scroll_offset {
         state.cursor_position
@@ -208,7 +208,7 @@ fn render_file_list(f: &mut Frame, area: Rect, state: &TuiState) {
         .items
         .iter()
         .enumerate()
-        .skip(scroll_offset)
+        .skip(state.scroll_offset)
         .take(visible_height)
         .map(|(i, item)| {
             let checkbox = if item.selected { "[✓]" } else { "[ ]" };

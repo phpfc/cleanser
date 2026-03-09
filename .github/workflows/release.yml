@@ -437,22 +437,32 @@ jobs:
         run: |
           $version = "${{ steps.get_version.outputs.version }}"
 
+          # List what was generated
+          Write-Host "Bundle contents:"
+          Get-ChildItem -Path "crates/cleanser-gui/target/release/bundle" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+
           # Find the NSIS installer
-          $nsis = Get-ChildItem -Path "crates/cleanser-gui/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
-          if ($nsis) {
-            $newName = "Cleanser-${version}-x64-setup.exe"
-            Copy-Item $nsis.FullName $newName
-            $hash = (Get-FileHash -Algorithm SHA256 $newName).Hash.ToLower()
-            "$hash  $newName" | Out-File -Encoding utf8 "${newName}.sha256"
+          $nsisPath = "crates/cleanser-gui/target/release/bundle/nsis"
+          if (Test-Path $nsisPath) {
+            $nsis = Get-ChildItem -Path $nsisPath -Filter "*.exe" | Select-Object -First 1
+            if ($nsis) {
+              $newName = "Cleanser-${version}-x64-setup.exe"
+              Copy-Item $nsis.FullName $newName
+              $hash = (Get-FileHash -Algorithm SHA256 $newName).Hash.ToLower()
+              "$hash  $newName" | Out-File -Encoding utf8 "${newName}.sha256"
+            }
           }
 
           # Find the MSI installer (if generated)
-          $msi = Get-ChildItem -Path "crates/cleanser-gui/target/release/bundle/msi" -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($msi) {
-            $newMsiName = "Cleanser-${version}-x64.msi"
-            Copy-Item $msi.FullName $newMsiName
-            $hash = (Get-FileHash -Algorithm SHA256 $newMsiName).Hash.ToLower()
-            "$hash  $newMsiName" | Out-File -Encoding utf8 "${newMsiName}.sha256"
+          $msiPath = "crates/cleanser-gui/target/release/bundle/msi"
+          if (Test-Path $msiPath) {
+            $msi = Get-ChildItem -Path $msiPath -Filter "*.msi" | Select-Object -First 1
+            if ($msi) {
+              $newMsiName = "Cleanser-${version}-x64.msi"
+              Copy-Item $msi.FullName $newMsiName
+              $hash = (Get-FileHash -Algorithm SHA256 $newMsiName).Hash.ToLower()
+              "$hash  $newMsiName" | Out-File -Encoding utf8 "${newMsiName}.sha256"
+            }
           }
 
       - name: Upload installer to release

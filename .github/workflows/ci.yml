@@ -135,7 +135,7 @@ jobs:
       - name: Get version from Cargo.toml
         id: get_version
         run: |
-          VERSION=$(grep '^version' crates/cleanser-cli/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(grep -A1 '\[workspace.package\]' Cargo.toml | grep 'version' | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists

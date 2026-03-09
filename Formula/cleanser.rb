@@ -6,7 +6,7 @@
 
 class Cleanser < Formula
   desc "Fast CLI tool for clearing macOS storage space"
-  homepage "https://github.com/phpfc/cleanser"
+  homepage "https://cleanser-claws.app"
   url "https://github.com/phpfc/cleanser/archive/refs/tags/v0.1.1.tar.gz"
   sha256 "53cb7e8eada64b84eb7c73d25a5407e4add3069e8b2e5aeae36a9b726c4cd075"
   license "MIT"

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.tauri.app/config/2.0.0/capability.schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Cleanser app",
+  "local": true,
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-set-title",
+    "shell:allow-open",
+    {
+      "identifier": "dialog:allow-open",
+      "allow": [
+        {
+          "directory": true
+        }
+      ]
+    },
+    "dialog:default",
+    "opener:default",
+    "opener:allow-open-path",
+    "opener:allow-reveal-item-in-dir"
+  ]
+}

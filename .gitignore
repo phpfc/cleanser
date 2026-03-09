@@ -1,6 +1,5 @@
 # Rust
 /target/
-Cargo.lock
 
 # IDE
 .vscode/
@@ -15,3 +14,10 @@ Cargo.lock
 # Homebrew bottles (build artifacts)
 *.bottle.tar.gz
 *.bottle.json
+
+# Node.js
+node_modules/
+dist/
+
+# Tauri
+crates/cleanser-gui/gen/

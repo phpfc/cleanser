@@ -38,10 +38,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --workspace --verbose
 
       - name: Run tests (release mode)
-        run: cargo test --release --verbose
+        run: cargo test --workspace --release --verbose
 
   lint:
     name: Lint
@@ -73,10 +73,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check formatting
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   build:
     name: Build
@@ -113,7 +113,7 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} -p cleanser
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -135,7 +135,7 @@ jobs:
       - name: Get version from Cargo.toml
         id: get_version
         run: |
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(grep '^version' crates/cleanser-cli/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists

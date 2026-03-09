@@ -136,8 +136,7 @@ pub async fn clean_items(
         .ok_or_else(|| "No cached scan results found. Please run a scan first.".to_string())?;
 
     // Find items matching the provided paths
-    let path_set: std::collections::HashSet<PathBuf> =
-        paths.iter().map(PathBuf::from).collect();
+    let path_set: std::collections::HashSet<PathBuf> = paths.iter().map(PathBuf::from).collect();
 
     let items_to_delete: Vec<CleanableItem> = cached
         .items
@@ -155,8 +154,8 @@ pub async fn clean_items(
     }
 
     let progress = TauriProgress::new(window);
-    let result =
-        delete_items_with_progress(&items_to_delete, dry_run, &progress).map_err(|e| e.to_string())?;
+    let result = delete_items_with_progress(&items_to_delete, dry_run, &progress)
+        .map_err(|e| e.to_string())?;
 
     Ok(CleanResultDto {
         cleaned_count: result.cleaned_count,

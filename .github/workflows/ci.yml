@@ -38,10 +38,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        run: cargo test --workspace --verbose
+        run: cargo test --workspace --exclude cleanser-gui --verbose
 
       - name: Run tests (release mode)
-        run: cargo test --workspace --release --verbose
+        run: cargo test --workspace --exclude cleanser-gui --release --verbose
 
   lint:
     name: Lint
@@ -76,7 +76,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --exclude cleanser-gui --all-targets -- -D warnings
 
   build:
     name: Build

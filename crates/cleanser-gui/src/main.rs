@@ -9,9 +9,9 @@ mod commands;
 mod progress;
 
 use commands::{
-    add_to_whitelist, clean_items, filter_items_by_risk, get_cached_scan, get_map_stats,
-    get_system_info, get_whitelist, rebuild_map, remove_from_whitelist, reveal_in_file_manager,
-    scan,
+    add_to_whitelist, check_version, clean_items, filter_items_by_risk, get_cached_scan,
+    get_current_version, get_map_stats, get_system_info, get_whitelist, rebuild_map,
+    remove_from_whitelist, reveal_in_file_manager, scan,
 };
 
 fn main() {
@@ -31,6 +31,8 @@ fn main() {
             get_map_stats,
             rebuild_map,
             reveal_in_file_manager,
+            check_version,
+            get_current_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

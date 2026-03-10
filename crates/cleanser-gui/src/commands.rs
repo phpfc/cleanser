@@ -2,9 +2,10 @@
 
 use crate::progress::TauriProgress;
 use cleanser_core::{
-    delete_items_with_progress, filter_by_risk, home_dir_or_err, load_scan_results,
-    save_scan_results, scan_with_progress, CleanableItem, DirectoryCategory, FileSystemCrawler,
-    FileSystemMap, IgnoreList, Platform, RiskLevel, ScanConfig, ScanSpeed, WhitelistConfig,
+    check_for_updates, delete_items_with_progress, filter_by_risk, home_dir_or_err,
+    load_scan_results, save_scan_results, scan_with_progress, CleanableItem, DirectoryCategory,
+    FileSystemCrawler, FileSystemMap, IgnoreList, Platform, RiskLevel, ScanConfig, ScanSpeed,
+    VersionInfo, WhitelistConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -461,4 +462,40 @@ pub async fn rebuild_map(window: Window) -> Result<MapStatsDto, String> {
         categories,
         tags,
     })
+}
+
+// ============================================================================
+// Version Commands
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct VersionInfoDto {
+    pub current: String,
+    pub latest: Option<String>,
+    pub update_available: bool,
+    pub release_url: Option<String>,
+}
+
+impl From<VersionInfo> for VersionInfoDto {
+    fn from(info: VersionInfo) -> Self {
+        Self {
+            current: info.current,
+            latest: info.latest,
+            update_available: info.update_available,
+            release_url: info.release_url,
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn check_version() -> Result<VersionInfoDto, String> {
+    check_for_updates()
+        .await
+        .map(|info| info.into())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_current_version() -> String {
+    cleanser_core::current_version().to_string()
 }

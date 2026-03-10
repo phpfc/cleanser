@@ -29,7 +29,11 @@ pub fn list(json: bool) -> anyhow::Result<()> {
     println!();
 
     for entry in entries {
-        let type_indicator = if entry.is_directory { "[DIR]" } else { "[FILE]" };
+        let type_indicator = if entry.is_directory {
+            "[DIR]"
+        } else {
+            "[FILE]"
+        };
         let size_str = format_size(entry.size, BINARY);
         let age = entry.age_string();
 
@@ -189,7 +193,10 @@ pub fn stats() -> anyhow::Result<()> {
     println!("{}", "=== Trash Statistics ===".cyan().bold());
     println!("Location: {}", manager.trash_dir().display());
     println!("Items: {}", entries.len());
-    println!("Total size: {}", format_size(manager.total_size(), BINARY).yellow());
+    println!(
+        "Total size: {}",
+        format_size(manager.total_size(), BINARY).yellow()
+    );
 
     if !entries.is_empty() {
         // Count by type
@@ -200,10 +207,18 @@ pub fn stats() -> anyhow::Result<()> {
 
         // Oldest and newest
         if let Some(oldest) = entries.iter().min_by_key(|e| e.deleted_at) {
-            println!("Oldest: {} ({})", oldest.original_path.display(), oldest.age_string());
+            println!(
+                "Oldest: {} ({})",
+                oldest.original_path.display(),
+                oldest.age_string()
+            );
         }
         if let Some(newest) = entries.iter().max_by_key(|e| e.deleted_at) {
-            println!("Newest: {} ({})", newest.original_path.display(), newest.age_string());
+            println!(
+                "Newest: {} ({})",
+                newest.original_path.display(),
+                newest.age_string()
+            );
         }
     }
 

@@ -6,6 +6,7 @@ use humansize::{format_size, BINARY};
 use std::path::PathBuf;
 
 /// Create a new scheduled job
+#[allow(clippy::too_many_arguments)]
 pub fn set(
     name: String,
     frequency: String,
@@ -30,7 +31,10 @@ pub fn set(
     scheduler.create_job(job)?;
 
     println!("{} Created scheduled job: {}", "OK".green(), name);
-    println!("  Schedule: {}", ScheduleFrequency::parse(&frequency)?.description());
+    println!(
+        "  Schedule: {}",
+        ScheduleFrequency::parse(&frequency)?.description()
+    );
     println!("  Risk level: {}", risk);
 
     if trash {
@@ -51,7 +55,10 @@ pub fn list(json: bool) -> anyhow::Result<()> {
 
     if jobs.is_empty() {
         println!("{}", "No scheduled jobs".yellow());
-        println!("{}", "Create one with: cleanser schedule set <name> -f <frequency>".dimmed());
+        println!(
+            "{}",
+            "Create one with: cleanser schedule set <name> -f <frequency>".dimmed()
+        );
         return Ok(());
     }
 
@@ -180,8 +187,8 @@ pub fn run(job_name: String, dry_run: bool) -> anyhow::Result<()> {
 
     if !dry_run {
         // Actually run the clean command
-        use cleanser_core::{clean_with_config, CleanConfig, DeletionMethod, SecureDeleteConfig};
         use crate::progress::CliProgress;
+        use cleanser_core::{clean_with_config, CleanConfig, DeletionMethod, SecureDeleteConfig};
 
         let deletion_method = if job.use_trash {
             DeletionMethod::Trash

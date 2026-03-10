@@ -255,7 +255,10 @@ mod tests {
     fn test_generate_plist_daily() {
         let job = ScheduledJob::new(
             "test".to_string(),
-            ScheduleFrequency::Daily { hour: 9, minute: 30 },
+            ScheduleFrequency::Daily {
+                hour: 9,
+                minute: 30,
+            },
         );
 
         let plist = generate_plist(&job, Path::new("/usr/local/bin/cleanser"));

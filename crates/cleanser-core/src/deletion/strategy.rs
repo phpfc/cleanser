@@ -4,21 +4,16 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Method for deleting files
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DeletionMethod {
     /// Standard filesystem deletion (default)
+    #[default]
     Standard,
     /// Move to system trash for recovery
     Trash,
     /// Secure deletion with data overwrite
     Secure(SecureDeleteConfig),
-}
-
-impl Default for DeletionMethod {
-    fn default() -> Self {
-        Self::Standard
-    }
 }
 
 /// Configuration for secure deletion
@@ -149,10 +144,16 @@ mod tests {
     #[test]
     fn test_secure_delete_config_builders() {
         assert_eq!(SecureDeleteConfig::zeros().passes, 1);
-        assert_eq!(SecureDeleteConfig::zeros().pattern, SecureDeletePattern::Zeros);
+        assert_eq!(
+            SecureDeleteConfig::zeros().pattern,
+            SecureDeletePattern::Zeros
+        );
 
         assert_eq!(SecureDeleteConfig::random().passes, 1);
-        assert_eq!(SecureDeleteConfig::random().pattern, SecureDeletePattern::Random);
+        assert_eq!(
+            SecureDeleteConfig::random().pattern,
+            SecureDeletePattern::Random
+        );
 
         assert_eq!(SecureDeleteConfig::dod().passes, 3);
         assert_eq!(SecureDeleteConfig::gutmann().passes, 35);

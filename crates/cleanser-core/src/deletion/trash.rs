@@ -53,8 +53,9 @@ impl TrashManager {
         let trash_dir = Self::get_trash_directory(&config)?;
 
         // Ensure trash directory exists
-        fs::create_dir_all(&trash_dir)
-            .with_context(|| format!("Failed to create trash directory: {}", trash_dir.display()))?;
+        fs::create_dir_all(&trash_dir).with_context(|| {
+            format!("Failed to create trash directory: {}", trash_dir.display())
+        })?;
 
         let journal = TrashJournal::load()?;
 
@@ -72,8 +73,9 @@ impl TrashManager {
     fn new_isolated(config: TrashConfig) -> Result<Self> {
         let trash_dir = Self::get_trash_directory(&config)?;
 
-        fs::create_dir_all(&trash_dir)
-            .with_context(|| format!("Failed to create trash directory: {}", trash_dir.display()))?;
+        fs::create_dir_all(&trash_dir).with_context(|| {
+            format!("Failed to create trash directory: {}", trash_dir.display())
+        })?;
 
         // Use a fresh, empty journal that doesn't load from disk
         let journal = TrashJournal::default();
@@ -195,7 +197,11 @@ impl TrashManager {
         self.journal.add_entry(entry.clone());
         self.save_journal()?;
 
-        info!("Moved to trash: {} -> {}", path.display(), entry.trash_path.display());
+        info!(
+            "Moved to trash: {} -> {}",
+            path.display(),
+            entry.trash_path.display()
+        );
 
         // Auto-cleanup old entries if configured
         if let Some(days) = self.config.auto_empty_days {
@@ -288,14 +294,23 @@ impl TrashManager {
         }
 
         // Move back
-        fs::rename(&entry.trash_path, &restore_path)
-            .with_context(|| format!("Failed to restore {} to {}", entry.trash_path.display(), restore_path.display()))?;
+        fs::rename(&entry.trash_path, &restore_path).with_context(|| {
+            format!(
+                "Failed to restore {} to {}",
+                entry.trash_path.display(),
+                restore_path.display()
+            )
+        })?;
 
         // Remove from journal
         self.journal.remove_entry(&entry.id);
         self.save_journal()?;
 
-        info!("Restored from trash: {} -> {}", entry.trash_path.display(), restore_path.display());
+        info!(
+            "Restored from trash: {} -> {}",
+            entry.trash_path.display(),
+            restore_path.display()
+        );
 
         Ok(restore_path)
     }
@@ -323,7 +338,10 @@ impl TrashManager {
         self.journal.remove_entry(entry_id);
         self.save_journal()?;
 
-        info!("Permanently deleted from trash: {}", entry.trash_path.display());
+        info!(
+            "Permanently deleted from trash: {}",
+            entry.trash_path.display()
+        );
 
         Ok(size)
     }
@@ -350,7 +368,10 @@ impl TrashManager {
         self.journal.clear();
         self.save_journal()?;
 
-        info!("Emptied trash: {} items, {} bytes freed", entry_count, total_size);
+        info!(
+            "Emptied trash: {} items, {} bytes freed",
+            entry_count, total_size
+        );
 
         Ok(total_size)
     }

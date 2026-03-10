@@ -3,7 +3,9 @@
 //! This module provides the core cleaning functionality that deletes
 //! files and directories. It uses callbacks for progress updates.
 
-use crate::deletion::{DeletionMethod, SecureDeleteConfig, SecureDeleter, TrashConfig, TrashManager};
+use crate::deletion::{
+    DeletionMethod, SecureDeleteConfig, SecureDeleter, TrashConfig, TrashManager,
+};
 use crate::progress::{CleanPhase, CleanProgress, NoOpProgress, ProgressCallback};
 use crate::types::*;
 use crate::utils::get_dir_size;
@@ -432,7 +434,10 @@ pub fn delete_items_with_method(
 }
 
 /// Clean files using a CleanConfig
-pub fn clean_with_config(config: CleanConfig, progress: &dyn ProgressCallback) -> Result<CleanResult> {
+pub fn clean_with_config(
+    config: CleanConfig,
+    progress: &dyn ProgressCallback,
+) -> Result<CleanResult> {
     // Try to load from cache first
     let results = if !config.force_scan {
         progress.on_clean_progress(CleanProgress {
@@ -494,7 +499,12 @@ pub fn clean_with_config(config: CleanConfig, progress: &dyn ProgressCallback) -
     }
 
     // Perform the cleanup
-    let result = delete_items_with_method(&items_to_clean, config.dry_run, &config.deletion_method, progress)?;
+    let result = delete_items_with_method(
+        &items_to_clean,
+        config.dry_run,
+        &config.deletion_method,
+        progress,
+    )?;
 
     // Update cache to remove deleted items
     if !result.deleted_paths.is_empty() && !config.force_scan && !config.dry_run {

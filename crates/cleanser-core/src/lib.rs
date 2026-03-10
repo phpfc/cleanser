@@ -62,7 +62,9 @@ pub use deletion::{
 };
 
 // Re-export scheduler types
-pub use scheduler::{ScheduleConfig, ScheduleFrequency, ScheduledJob, ScheduledJobResult, Scheduler};
+pub use scheduler::{
+    ScheduleConfig, ScheduleFrequency, ScheduledJob, ScheduledJobResult, Scheduler,
+};
 
 // Re-export progress types
 pub use progress::{

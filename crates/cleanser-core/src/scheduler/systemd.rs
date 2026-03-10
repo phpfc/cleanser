@@ -262,7 +262,10 @@ mod tests {
     fn test_generate_timer_daily() {
         let job = ScheduledJob::new(
             "test".to_string(),
-            ScheduleFrequency::Daily { hour: 9, minute: 30 },
+            ScheduleFrequency::Daily {
+                hour: 9,
+                minute: 30,
+            },
         );
 
         let timer = generate_timer(&job);

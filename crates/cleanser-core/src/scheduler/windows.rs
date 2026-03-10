@@ -83,7 +83,10 @@ fn build_schedule_args(frequency: &ScheduleFrequency) -> (String, Vec<String>) {
     match frequency {
         ScheduleFrequency::Hourly(n) => {
             let minutes = *n as u32 * 60;
-            ("minute".to_string(), vec!["/mo".to_string(), minutes.to_string()])
+            (
+                "minute".to_string(),
+                vec!["/mo".to_string(), minutes.to_string()],
+            )
         }
         ScheduleFrequency::Daily { hour, minute } => (
             "daily".to_string(),
@@ -123,7 +126,10 @@ fn build_schedule_args(frequency: &ScheduleFrequency) -> (String, Vec<String>) {
         ),
         ScheduleFrequency::Cron(_) => {
             // Windows doesn't support cron, default to daily at 9am
-            ("daily".to_string(), vec!["/st".to_string(), "09:00".to_string()])
+            (
+                "daily".to_string(),
+                vec!["/st".to_string(), "09:00".to_string()],
+            )
         }
     }
 }

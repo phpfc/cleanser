@@ -146,8 +146,8 @@ impl TrashJournal {
         let content = fs::read_to_string(&journal_path)
             .with_context(|| format!("Failed to read journal from {}", journal_path.display()))?;
 
-        let journal: Self = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse journal JSON")?;
+        let journal: Self =
+            serde_json::from_str(&content).with_context(|| "Failed to parse journal JSON")?;
 
         lock_file.unlock()?;
 
@@ -159,7 +159,10 @@ impl TrashJournal {
             );
         }
 
-        debug!("Loaded trash journal with {} entries", journal.entries.len());
+        debug!(
+            "Loaded trash journal with {} entries",
+            journal.entries.len()
+        );
         Ok(journal)
     }
 
@@ -178,8 +181,7 @@ impl TrashJournal {
             .lock_exclusive()
             .context("Failed to acquire exclusive lock on journal")?;
 
-        let content = serde_json::to_string_pretty(self)
-            .context("Failed to serialize journal")?;
+        let content = serde_json::to_string_pretty(self).context("Failed to serialize journal")?;
 
         fs::write(&journal_path, content)
             .with_context(|| format!("Failed to write journal to {}", journal_path.display()))?;
@@ -243,7 +245,6 @@ impl TrashJournal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
     fn test_trash_entry_creation() {

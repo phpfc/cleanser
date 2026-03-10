@@ -9,6 +9,7 @@ use colored::Colorize;
 use humansize::{format_size, BINARY};
 use std::io;
 
+#[allow(clippy::too_many_arguments)]
 pub fn execute(
     risk: RiskLevel,
     yes: bool,
@@ -33,12 +34,9 @@ pub fn execute(
         DeletionMethod::Secure(config) => {
             println!(
                 "{}",
-                format!(
-                    "SECURE DELETE MODE - {} overwrite passes",
-                    config.passes
-                )
-                .yellow()
-                .bold()
+                format!("SECURE DELETE MODE - {} overwrite passes", config.passes)
+                    .yellow()
+                    .bold()
             );
         }
         DeletionMethod::Trash => {

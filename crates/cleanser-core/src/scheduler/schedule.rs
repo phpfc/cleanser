@@ -49,7 +49,10 @@ impl ScheduleFrequency {
         let s = s.trim().to_lowercase();
 
         // Check for cron expression (starts with a number or *)
-        if s.chars().next().map_or(false, |c| c.is_ascii_digit() || c == '*') {
+        if s.chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit() || c == '*')
+        {
             return Ok(Self::Cron(s));
         }
 
@@ -193,7 +196,12 @@ impl ScheduleFrequency {
                         Weekday::Sun => "Sun",
                     })
                     .collect();
-                format!("Weekly on {} at {:02}:{:02}", day_names.join(", "), hour, minute)
+                format!(
+                    "Weekly on {} at {:02}:{:02}",
+                    day_names.join(", "),
+                    hour,
+                    minute
+                )
             }
             Self::Monthly { day, hour, minute } => {
                 format!("Monthly on day {} at {:02}:{:02}", day, hour, minute)
@@ -435,7 +443,8 @@ impl ScheduleConfig {
 
         // Trim history if too large
         if self.history.len() > MAX_HISTORY_ENTRIES {
-            self.history.drain(0..self.history.len() - MAX_HISTORY_ENTRIES);
+            self.history
+                .drain(0..self.history.len() - MAX_HISTORY_ENTRIES);
         }
     }
 }
@@ -456,7 +465,13 @@ mod tests {
     #[test]
     fn test_parse_daily() {
         let freq = ScheduleFrequency::parse("daily@09:30").unwrap();
-        assert_eq!(freq, ScheduleFrequency::Daily { hour: 9, minute: 30 });
+        assert_eq!(
+            freq,
+            ScheduleFrequency::Daily {
+                hour: 9,
+                minute: 30
+            }
+        );
     }
 
     #[test]
@@ -480,7 +495,10 @@ mod tests {
 
     #[test]
     fn test_to_cron() {
-        let freq = ScheduleFrequency::Daily { hour: 9, minute: 30 };
+        let freq = ScheduleFrequency::Daily {
+            hour: 9,
+            minute: 30,
+        };
         assert_eq!(freq.to_cron(), "30 9 * * *");
 
         let freq = ScheduleFrequency::Hourly(2);
@@ -489,7 +507,10 @@ mod tests {
 
     #[test]
     fn test_scheduled_job_build_args() {
-        let job = ScheduledJob::new("test".to_string(), ScheduleFrequency::Daily { hour: 9, minute: 0 });
+        let job = ScheduledJob::new(
+            "test".to_string(),
+            ScheduleFrequency::Daily { hour: 9, minute: 0 },
+        );
         let args = job.build_args();
 
         assert!(args.contains(&"clean".to_string()));

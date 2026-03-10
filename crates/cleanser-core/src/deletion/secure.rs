@@ -5,7 +5,9 @@
 //! - Gutmann method (35 passes)
 //! - Simple zero/random overwrite
 
-use super::strategy::{DeletionProgress, NoOpDeletionProgress, SecureDeleteConfig, SecureDeletePattern};
+use super::strategy::{
+    DeletionProgress, NoOpDeletionProgress, SecureDeleteConfig, SecureDeletePattern,
+};
 use anyhow::{Context, Result};
 use rand::Rng;
 use std::fs::{self, File, OpenOptions};
@@ -59,10 +61,12 @@ impl SecureDeleter {
         progress.on_file_start(path, size);
 
         // Open file for writing
-        let mut file = OpenOptions::new()
-            .write(true)
-            .open(path)
-            .with_context(|| format!("Failed to open file for secure deletion: {}", path.display()))?;
+        let mut file = OpenOptions::new().write(true).open(path).with_context(|| {
+            format!(
+                "Failed to open file for secure deletion: {}",
+                path.display()
+            )
+        })?;
 
         // Perform overwrite passes
         self.overwrite_file(&mut file, size, progress)?;
@@ -75,8 +79,12 @@ impl SecureDeleter {
         drop(file);
 
         // Delete the file
-        fs::remove_file(path)
-            .with_context(|| format!("Failed to remove file after secure overwrite: {}", path.display()))?;
+        fs::remove_file(path).with_context(|| {
+            format!(
+                "Failed to remove file after secure overwrite: {}",
+                path.display()
+            )
+        })?;
 
         progress.on_file_complete(path);
         debug!("Securely deleted file: {}", path.display());
@@ -134,7 +142,7 @@ impl SecureDeleter {
             .collect();
 
         // Sort by depth (deepest first)
-        dirs.sort_by(|a, b| b.components().count().cmp(&a.components().count()));
+        dirs.sort_by_key(|b| std::cmp::Reverse(b.components().count()));
 
         for dir_path in dirs {
             if let Err(e) = fs::remove_dir(&dir_path) {
@@ -214,8 +222,8 @@ impl SecureDeleter {
             }
             SecureDeletePattern::DoD522022M => {
                 match pass % 3 {
-                    0 => buffer.fill(0x00),      // Pass 1: zeros
-                    1 => buffer.fill(0xFF),      // Pass 2: ones
+                    0 => buffer.fill(0x00),               // Pass 1: zeros
+                    1 => buffer.fill(0xFF),               // Pass 2: ones
                     _ => rand::thread_rng().fill(buffer), // Pass 3: random
                 }
             }

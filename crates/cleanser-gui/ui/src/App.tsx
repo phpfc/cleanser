@@ -12,11 +12,16 @@ import { formatSize } from "./utils";
 type ScanSpeed = "quick" | "normal" | "thorough";
 type Tab = "scan" | "map";
 
+// Default scan settings
+const DEFAULT_MIN_FILE_SIZE_MB = 100;
+
 function App() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>("scan");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [speed, setSpeed] = useState<ScanSpeed>("normal");
+  const [minFileSizeMb, setMinFileSizeMb] = useState(DEFAULT_MIN_FILE_SIZE_MB);
+  const [findDuplicates, setFindDuplicates] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   const { results, isScanning, progress: scanProgress, error: scanError, scan, clearResults } = useScan();
@@ -27,8 +32,8 @@ function App() {
     clearResult();
     const config: ScanConfig = {
       speed,
-      min_file_size_mb: 100,
-      find_duplicates: false,
+      min_file_size_mb: minFileSizeMb,
+      find_duplicates: findDuplicates,
     };
     try {
       await scan(config);
@@ -80,7 +85,7 @@ function App() {
     try {
       await cleanItems(paths, false);
       setSelectedPaths(new Set());
-      await scan({ speed, min_file_size_mb: 100, find_duplicates: false });
+      await scan({ speed, min_file_size_mb: minFileSizeMb, find_duplicates: findDuplicates });
     } catch (e) {
       console.error("Clean failed:", e);
     }
@@ -315,7 +320,15 @@ function App() {
       )}
 
       {/* Settings modal */}
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          minFileSizeMb={minFileSizeMb}
+          onMinFileSizeMbChange={setMinFileSizeMb}
+          findDuplicates={findDuplicates}
+          onFindDuplicatesChange={setFindDuplicates}
+        />
+      )}
     </div>
   );
 }

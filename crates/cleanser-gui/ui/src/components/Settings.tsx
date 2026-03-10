@@ -6,9 +6,19 @@ import { useI18n, Language, Theme } from "../i18n";
 
 interface Props {
   onClose: () => void;
+  minFileSizeMb: number;
+  onMinFileSizeMbChange: (value: number) => void;
+  findDuplicates: boolean;
+  onFindDuplicatesChange: (value: boolean) => void;
 }
 
-export function Settings({ onClose }: Props) {
+export function Settings({
+  onClose,
+  minFileSizeMb,
+  onMinFileSizeMbChange,
+  findDuplicates,
+  onFindDuplicatesChange
+}: Props) {
   const { t, language, setLanguage, theme, setTheme } = useI18n();
   const [whitelist, setWhitelist] = useState<string[]>([]);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
@@ -106,6 +116,56 @@ export function Settings({ onClose }: Props) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
+          {/* Scan Settings */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-secondary mb-3 uppercase tracking-wide">
+              {t("scanSettings") || "Scan Settings"}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-muted mb-1">
+                  {t("minFileSize") || "Minimum file size (MB)"}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10000"
+                  value={minFileSizeMb}
+                  onChange={(e) => onMinFileSizeMbChange(Math.max(1, parseInt(e.target.value) || 100))}
+                  className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-sm focus:border-[var(--orange-primary)] focus:outline-none"
+                />
+                <p className="text-xs text-muted mt-1">
+                  {t("minFileSizeDescription") || "Only detect files larger than this size"}
+                </p>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm text-primary">
+                    {t("findDuplicates") || "Find duplicate files"}
+                  </label>
+                  <p className="text-xs text-muted">
+                    {t("findDuplicatesDescription") || "Scan for duplicate files (slower)"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={findDuplicates}
+                  onClick={() => onFindDuplicatesChange(!findDuplicates)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    findDuplicates ? "bg-[var(--orange-primary)]" : "bg-[var(--bg-tertiary)]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      findDuplicates ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Language & Theme */}
           <div className="mb-6">
             <h3 className="text-sm font-semibold text-secondary mb-3 uppercase tracking-wide">

@@ -5,7 +5,8 @@ use cleanser_core::{
     check_for_updates, delete_items_with_progress, filter_by_risk, home_dir_or_err,
     load_scan_results, save_scan_results, scan_with_progress, CleanableItem, DirectoryCategory,
     FileSystemCrawler, FileSystemMap, IgnoreList, Platform, RiskLevel, ScanConfig, ScanSpeed,
-    VersionInfo, WhitelistConfig,
+    ScheduleFrequency, ScheduledJob, Scheduler, TrashConfig, TrashManager, VersionInfo,
+    WhitelistConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -498,4 +499,194 @@ pub async fn check_version() -> Result<VersionInfoDto, String> {
 #[tauri::command]
 pub fn get_current_version() -> String {
     cleanser_core::current_version().to_string()
+}
+
+// ============================================================================
+// Trash Commands
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct TrashEntryDto {
+    pub id: String,
+    pub original_path: String,
+    pub trash_path: String,
+    pub size: u64,
+    pub is_directory: bool,
+    pub deleted_at: String,
+    pub age: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TrashStatsDto {
+    pub location: String,
+    pub item_count: usize,
+    pub total_size: u64,
+    pub directories: usize,
+    pub files: usize,
+}
+
+#[tauri::command]
+pub fn get_trash_items() -> Result<Vec<TrashEntryDto>, String> {
+    let manager = TrashManager::new(TrashConfig::default()).map_err(|e| e.to_string())?;
+    let entries = manager.list();
+
+    Ok(entries
+        .iter()
+        .map(|e| TrashEntryDto {
+            id: e.id.clone(),
+            original_path: e.original_path.to_string_lossy().to_string(),
+            trash_path: e.trash_path.to_string_lossy().to_string(),
+            size: e.size,
+            is_directory: e.is_directory,
+            deleted_at: e.deleted_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            age: e.age_string(),
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn get_trash_stats() -> Result<TrashStatsDto, String> {
+    let manager = TrashManager::new(TrashConfig::default()).map_err(|e| e.to_string())?;
+    let entries = manager.list();
+
+    let directories = entries.iter().filter(|e| e.is_directory).count();
+    let files = entries.len() - directories;
+
+    Ok(TrashStatsDto {
+        location: manager.trash_dir().to_string_lossy().to_string(),
+        item_count: entries.len(),
+        total_size: manager.total_size(),
+        directories,
+        files,
+    })
+}
+
+#[tauri::command]
+pub fn restore_trash_item(entry_id: String, to_path: Option<String>) -> Result<String, String> {
+    let mut manager = TrashManager::new(TrashConfig::default()).map_err(|e| e.to_string())?;
+
+    let restored_path = manager.restore(&entry_id).map_err(|e| e.to_string())?;
+
+    // If custom destination was provided, move to that location
+    let final_path = if let Some(dest) = to_path {
+        let dest_path = std::path::PathBuf::from(&dest);
+        std::fs::rename(&restored_path, &dest_path).map_err(|e| e.to_string())?;
+        dest_path
+    } else {
+        restored_path
+    };
+
+    Ok(final_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn delete_trash_item(entry_id: String) -> Result<u64, String> {
+    let mut manager = TrashManager::new(TrashConfig::default()).map_err(|e| e.to_string())?;
+    manager
+        .delete_permanently(&entry_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn empty_trash() -> Result<u64, String> {
+    let mut manager = TrashManager::new(TrashConfig::default()).map_err(|e| e.to_string())?;
+    manager.empty().map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Schedule Commands
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct ScheduledJobDto {
+    pub id: String,
+    pub name: String,
+    pub frequency: String,
+    pub risk_level: String,
+    pub enabled: bool,
+    pub use_trash: bool,
+    pub secure_delete: bool,
+    pub last_run: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateJobDto {
+    pub name: String,
+    pub frequency: String,
+    pub risk_level: String,
+    pub use_trash: bool,
+    pub secure_delete: bool,
+    pub notify: bool,
+}
+
+#[tauri::command]
+pub fn get_scheduled_jobs() -> Result<Vec<ScheduledJobDto>, String> {
+    let scheduler = Scheduler::new().map_err(|e| e.to_string())?;
+    let jobs = scheduler.list_jobs();
+
+    Ok(jobs
+        .iter()
+        .map(|j| ScheduledJobDto {
+            id: j.id.clone(),
+            name: j.name.clone(),
+            frequency: j.frequency.description(),
+            risk_level: format!("{}", j.risk_level),
+            enabled: j.enabled,
+            use_trash: j.use_trash,
+            secure_delete: j.secure_delete,
+            last_run: j.last_run.map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()),
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn create_scheduled_job(job: CreateJobDto) -> Result<ScheduledJobDto, String> {
+    let freq = ScheduleFrequency::parse(&job.frequency).map_err(|e| e.to_string())?;
+
+    let risk_level = match job.risk_level.to_lowercase().as_str() {
+        "safe" => RiskLevel::Safe,
+        "moderate" => RiskLevel::Moderate,
+        "risky" => RiskLevel::Risky,
+        _ => RiskLevel::Safe,
+    };
+
+    let mut scheduled_job = ScheduledJob::new(job.name.clone(), freq);
+    scheduled_job.risk_level = risk_level;
+    scheduled_job.use_trash = job.use_trash;
+    scheduled_job.secure_delete = job.secure_delete;
+    scheduled_job.notify_on_complete = job.notify;
+
+    let mut scheduler = Scheduler::new().map_err(|e| e.to_string())?;
+    scheduler
+        .create_job(scheduled_job.clone())
+        .map_err(|e| e.to_string())?;
+
+    Ok(ScheduledJobDto {
+        id: scheduled_job.id,
+        name: scheduled_job.name,
+        frequency: scheduled_job.frequency.description(),
+        risk_level: format!("{}", scheduled_job.risk_level),
+        enabled: scheduled_job.enabled,
+        use_trash: scheduled_job.use_trash,
+        secure_delete: scheduled_job.secure_delete,
+        last_run: None,
+    })
+}
+
+#[tauri::command]
+pub fn remove_scheduled_job(job_name: String) -> Result<(), String> {
+    let mut scheduler = Scheduler::new().map_err(|e| e.to_string())?;
+    scheduler.remove_job(&job_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn enable_scheduled_job(job_name: String) -> Result<(), String> {
+    let mut scheduler = Scheduler::new().map_err(|e| e.to_string())?;
+    scheduler.enable_job(&job_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn disable_scheduled_job(job_name: String) -> Result<(), String> {
+    let mut scheduler = Scheduler::new().map_err(|e| e.to_string())?;
+    scheduler.disable_job(&job_name).map_err(|e| e.to_string())
 }

@@ -5,10 +5,12 @@
 
 use crate::progress::{CleanPhase, CleanProgress, NoOpProgress, ProgressCallback};
 use crate::types::*;
+use crate::utils::get_dir_size;
 use crate::{cache, platform, scanner};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
+use tracing::warn;
 
 /// Clean files without progress callback
 pub fn clean(max_risk: RiskLevel, dry_run: bool, force_scan: bool) -> Result<CleanResult> {
@@ -134,7 +136,9 @@ pub fn clean_with_progress(
 
     // Update cache to remove deleted items
     if !result.deleted_paths.is_empty() && !force_scan {
-        let _ = cache::update_cache_after_deletion(&result.deleted_paths);
+        if let Err(e) = cache::update_cache_after_deletion(&result.deleted_paths) {
+            warn!("Failed to update cache after deletion: {}", e);
+        }
     }
 
     Ok(result)
@@ -147,7 +151,9 @@ fn run_fresh_scan() -> Result<ScanResults> {
     // Load whitelist and add to ignore patterns
     if let Ok(whitelist) = WhitelistConfig::load() {
         for path in whitelist.list_paths() {
-            let _ = ignore_patterns.add_pattern(&path.to_string_lossy());
+            if let Err(e) = ignore_patterns.add_pattern(&path.to_string_lossy()) {
+                warn!("Failed to add whitelist pattern {}: {}", path.display(), e);
+            }
         }
     }
 
@@ -165,9 +171,52 @@ fn run_fresh_scan() -> Result<ScanResults> {
     let results = scanner::scan(config)?;
 
     // Save to cache for next time
-    let _ = cache::save_scan_results(&results);
+    if let Err(e) = cache::save_scan_results(&results) {
+        warn!("Failed to save scan results to cache: {}", e);
+    }
 
     Ok(results)
+}
+
+/// Check if a path or any of its contents contain symlinks pointing outside
+fn contains_external_symlinks(path: &Path) -> Result<bool> {
+    let canonical_base = path.canonicalize()?;
+
+    if path.is_dir() {
+        for entry in walkdir::WalkDir::new(path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let entry_path = entry.path();
+            if entry_path.is_symlink() {
+                // Check if symlink points outside the directory being deleted
+                if let Ok(target) = fs::read_link(entry_path) {
+                    let absolute_target = if target.is_absolute() {
+                        target
+                    } else {
+                        entry_path.parent().unwrap_or(path).join(&target)
+                    };
+
+                    if let Ok(canonical_target) = absolute_target.canonicalize() {
+                        if !canonical_target.starts_with(&canonical_base) {
+                            warn!(
+                                "Found symlink pointing outside directory: {} -> {}",
+                                entry_path.display(),
+                                canonical_target.display()
+                            );
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+        }
+    } else if path.is_symlink() {
+        // Single file symlink - just warn but allow deletion
+        warn!("Path is a symlink: {}", path.display());
+    }
+
+    Ok(false)
 }
 
 /// Delete a file or directory
@@ -176,9 +225,19 @@ fn delete_item(path: &Path) -> Result<u64> {
         return Ok(0);
     }
 
+    // Safety check: verify no symlinks point outside the directory
+    if path.is_dir() {
+        if contains_external_symlinks(path)? {
+            anyhow::bail!(
+                "Directory contains symlinks pointing outside. Refusing to delete for safety: {}",
+                path.display()
+            );
+        }
+    }
+
     // Calculate size before deletion
     let size = if path.is_dir() {
-        get_dir_size_fast(path)?
+        get_dir_size(path)?
     } else {
         fs::metadata(path)?.len()
     };
@@ -191,24 +250,6 @@ fn delete_item(path: &Path) -> Result<u64> {
     }
 
     Ok(size)
-}
-
-/// Fast parallel directory size calculation
-fn get_dir_size_fast(path: &Path) -> Result<u64> {
-    use rayon::prelude::*;
-
-    // Parallel directory size calculation using Rayon's par_bridge()
-    let total: u64 = walkdir::WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .par_bridge() // Parallelize the iteration
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter_map(|e| e.metadata().ok())
-        .map(|m| m.len())
-        .sum();
-
-    Ok(total)
 }
 
 /// Delete specific items (used by interactive mode)

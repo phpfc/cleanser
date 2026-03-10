@@ -7,6 +7,7 @@ use crate::mapper::filesystem_map::{DirectoryCategory, MappedDirectory};
 use crate::mapper::{FileSystemCrawler, FileSystemMap};
 use crate::progress::{NoOpProgress, ProgressCallback, ScanPhase, ScanProgress};
 use crate::types::*;
+use crate::utils::get_dir_size;
 use anyhow::Result;
 use rayon::prelude::*;
 use regex::Regex;
@@ -15,6 +16,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 use walkdir::WalkDir;
 
 /// Scan using default settings (no progress callback)
@@ -67,7 +69,9 @@ pub fn scan_with_progress(
         }
 
         // Save the updated map
-        let _ = fs_map.save();
+        if let Err(e) = fs_map.save() {
+            warn!("Failed to save filesystem map: {}", e);
+        }
     }
 
     progress.on_scan_progress(ScanProgress {
@@ -316,25 +320,6 @@ fn check_log_file(path: &Path, log_regex: &Regex) -> Option<CleanableItem> {
         }
     }
     None
-}
-
-/// Get the total size of a directory
-pub fn get_dir_size(path: &Path) -> Result<u64> {
-    let mut total_size = 0u64;
-
-    for entry in WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total_size += metadata.len();
-            }
-        }
-    }
-
-    Ok(total_size)
 }
 
 /// Find duplicate files using SHA256 hashing

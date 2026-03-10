@@ -5,9 +5,9 @@
 [![CI](https://github.com/phpfc/cleanser/actions/workflows/ci.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/ci.yml)
 [![Release](https://github.com/phpfc/cleanser/actions/workflows/release.yml/badge.svg)](https://github.com/phpfc/cleanser/actions/workflows/release.yml)
 
-A blazing-fast cross-platform CLI tool for clearing storage space, written in Rust.
+A blazing-fast cross-platform tool for clearing storage space, written in Rust.
 
-**Works on macOS, Linux, and Windows.**
+**Works on macOS, Linux, and Windows.** Available as CLI and GUI (desktop app).
 
 ## Quick Start
 
@@ -118,6 +118,36 @@ git clone https://github.com/phpfc/cleanser.git
 cd cleanser
 cargo build --release
 sudo cp target/release/cleanser /usr/local/bin/
+```
+
+## Project Structure
+
+Cleanser is organized as a Cargo workspace with three crates:
+
+```
+crates/
+├── cleanser-core/    # Core library - scanning, cleaning, mapping logic
+├── cleanser-cli/     # Command-line interface with TUI support
+└── cleanser-gui/     # Desktop GUI (Tauri + React/TypeScript)
+```
+
+| Crate | Description |
+|-------|-------------|
+| `cleanser-core` | Shared library with platform-agnostic cleanup logic |
+| `cleanser-cli` | Terminal interface with interactive TUI mode |
+| `cleanser-gui` | Cross-platform desktop app built with Tauri |
+
+## Building
+
+**CLI only:**
+```bash
+cargo build --release -p cleanser-cli
+```
+
+**GUI (requires Node.js):**
+```bash
+cd crates/cleanser-gui/ui && npm install && cd ..
+cargo tauri build
 ```
 
 ## Safety

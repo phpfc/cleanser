@@ -73,3 +73,51 @@ export interface MapProgress {
   current: number;
   total: number;
 }
+
+// Version types
+export interface VersionInfo {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+  release_url: string | null;
+}
+
+// Trash types
+export interface TrashEntry {
+  id: string;
+  original_path: string;
+  trash_path: string;
+  size: number;
+  is_directory: boolean;
+  deleted_at: string;
+  age: string;
+}
+
+export interface TrashStats {
+  location: string;
+  item_count: number;
+  total_size: number;
+  directories: number;
+  files: number;
+}
+
+// Schedule types
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  frequency: string;
+  risk_level: string;
+  enabled: boolean;
+  use_trash: boolean;
+  secure_delete: boolean;
+  last_run: string | null;
+}
+
+export interface CreateJobInput {
+  name: string;
+  frequency: string;
+  risk_level: string;
+  use_trash: boolean;
+  secure_delete: boolean;
+  notify: boolean;
+}

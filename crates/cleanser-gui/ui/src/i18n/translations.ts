@@ -88,6 +88,52 @@ export const translations = {
 
     // Loading
     loading: "Loading...",
+
+    // Version
+    updateAvailable: "Update available",
+    currentVersion: "Current: v{version}",
+    latestVersion: "Latest: v{version}",
+    downloadUpdate: "Download",
+
+    // Trash
+    trashTab: "Trash",
+    trashEmpty: "Trash is empty",
+    trashEmptyDescription: "Deleted items will appear here when using --trash mode",
+    trashItems: "{count} items",
+    trashSize: "{size} total",
+    restore: "Restore",
+    deleteForever: "Delete Forever",
+    emptyTrash: "Empty Trash",
+    emptyTrashConfirm: "Permanently delete all {count} items?",
+    restored: "Restored successfully",
+    deleted: "Deleted permanently",
+    trashEmptied: "Trash emptied",
+
+    // Schedule
+    scheduleTab: "Schedule",
+    noScheduledJobs: "No scheduled jobs",
+    noScheduledJobsDescription: "Create automated cleanup schedules",
+    createJob: "Create Job",
+    jobName: "Job Name",
+    frequency: "Frequency",
+    riskLevel: "Risk Level",
+    useTrash: "Move to trash",
+    secureDelete: "Secure delete",
+    notifyOnComplete: "Notify when complete",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    lastRun: "Last run",
+    never: "Never",
+    enable: "Enable",
+    disable: "Disable",
+    remove: "Remove",
+    jobCreated: "Job created",
+    jobRemoved: "Job removed",
+    jobEnabled: "Job enabled",
+    jobDisabled: "Job disabled",
+    frequencyDaily: "Daily",
+    frequencyWeekly: "Weekly",
+    frequencyMonthly: "Monthly",
   },
   "pt-BR": {
     // App
@@ -176,6 +222,52 @@ export const translations = {
 
     // Loading
     loading: "Carregando...",
+
+    // Version
+    updateAvailable: "Atualização disponível",
+    currentVersion: "Atual: v{version}",
+    latestVersion: "Nova: v{version}",
+    downloadUpdate: "Baixar",
+
+    // Trash
+    trashTab: "Lixeira",
+    trashEmpty: "Lixeira vazia",
+    trashEmptyDescription: "Itens deletados aparecerão aqui ao usar o modo --trash",
+    trashItems: "{count} itens",
+    trashSize: "{size} total",
+    restore: "Restaurar",
+    deleteForever: "Excluir Permanentemente",
+    emptyTrash: "Esvaziar Lixeira",
+    emptyTrashConfirm: "Excluir permanentemente todos os {count} itens?",
+    restored: "Restaurado com sucesso",
+    deleted: "Excluído permanentemente",
+    trashEmptied: "Lixeira esvaziada",
+
+    // Schedule
+    scheduleTab: "Agendamento",
+    noScheduledJobs: "Nenhum agendamento",
+    noScheduledJobsDescription: "Crie agendamentos de limpeza automática",
+    createJob: "Criar Agendamento",
+    jobName: "Nome",
+    frequency: "Frequência",
+    riskLevel: "Nível de Risco",
+    useTrash: "Mover para lixeira",
+    secureDelete: "Exclusão segura",
+    notifyOnComplete: "Notificar ao concluir",
+    enabled: "Ativado",
+    disabled: "Desativado",
+    lastRun: "Última execução",
+    never: "Nunca",
+    enable: "Ativar",
+    disable: "Desativar",
+    remove: "Remover",
+    jobCreated: "Agendamento criado",
+    jobRemoved: "Agendamento removido",
+    jobEnabled: "Agendamento ativado",
+    jobDisabled: "Agendamento desativado",
+    frequencyDaily: "Diário",
+    frequencyWeekly: "Semanal",
+    frequencyMonthly: "Mensal",
   },
 } as const;
 

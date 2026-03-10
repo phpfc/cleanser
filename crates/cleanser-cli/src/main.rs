@@ -1,4 +1,6 @@
 mod commands;
+mod config;
+mod logging;
 mod output;
 mod progress;
 mod setup;
@@ -105,6 +107,11 @@ enum Commands {
         #[command(subcommand)]
         action: MapAction,
     },
+    /// Manage CLI configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -153,6 +160,24 @@ enum MapAction {
     Suggest,
 }
 
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Set a configuration value
+    Set {
+        /// Configuration key
+        key: String,
+        /// Value to set
+        value: String,
+    },
+    /// Get a configuration value
+    Get {
+        /// Configuration key
+        key: String,
+    },
+    /// List all configuration values
+    List,
+}
+
 // Clap-compatible wrappers for core types
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ScanSpeedArg {
@@ -188,15 +213,42 @@ impl From<RiskLevelArg> for cleanser_core::RiskLevel {
     }
 }
 
+use std::sync::mpsc;
+
+/// Start update check in a background thread
+fn start_update_check() -> Option<mpsc::Receiver<cleanser_core::VersionInfo>> {
+    let cli_config = config::CliConfig::load().unwrap_or_default();
+
+    if !cli_config.should_check_updates() {
+        return None;
+    }
+
+    let (tx, rx) = mpsc::channel();
+
+    cleanser_core::check_for_updates_background(move |result| {
+        if let Ok(info) = result {
+            let _ = tx.send(info);
+        }
+    });
+
+    Some(rx)
+}
+
 fn main() -> anyhow::Result<()> {
+    // Initialize logging
+    logging::init();
+
     // Check for first-time setup
     if setup::is_first_run() {
         setup::run_first_time_setup()?;
     }
 
+    // Start update check in background
+    let update_receiver = start_update_check();
+
     let cli = Cli::parse();
 
-    match cli.command {
+    let result = match cli.command {
         Commands::Scan {
             speed,
             paths,
@@ -250,5 +302,33 @@ fn main() -> anyhow::Result<()> {
             MapAction::Verify => commands::map::verify(),
             MapAction::Suggest => commands::map::suggest(),
         },
+        Commands::Config { action } => match action {
+            ConfigAction::Set { key, value } => commands::config::set(&key, &value),
+            ConfigAction::Get { key } => commands::config::get(&key),
+            ConfigAction::List => commands::config::list(),
+        },
+    };
+
+    // Check if update info is available (non-blocking)
+    if let Some(receiver) = update_receiver {
+        if let Ok(info) = receiver.try_recv() {
+            if info.update_available {
+                use colored::Colorize;
+                eprintln!();
+                eprintln!(
+                    "{} New version available: {} (you have {})",
+                    "[info]".cyan(),
+                    info.latest.as_deref().unwrap_or("unknown").green(),
+                    info.current.yellow()
+                );
+                eprintln!(
+                    "{} Update with: {}",
+                    "[info]".cyan(),
+                    "brew upgrade cleanser".bold()
+                );
+            }
+        }
     }
+
+    result
 }

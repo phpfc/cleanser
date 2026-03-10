@@ -97,12 +97,14 @@ export function Settings({
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+            aria-label={t("settings") + " close"}
           >
             <svg
               className="w-5 h-5 text-secondary"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"

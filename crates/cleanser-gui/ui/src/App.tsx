@@ -107,7 +107,7 @@ function App() {
         <div className="flex items-center gap-3">
           <img
             src="/mascot.png"
-            alt="Cleanser"
+            alt="Cleanser mascot"
             className="w-12 h-12 animate-bounce-subtle drop-shadow-lg"
           />
           <div>
@@ -120,12 +120,14 @@ function App() {
           onClick={() => setShowSettings(true)}
           className="p-2.5 hover:bg-[var(--bg-secondary)] rounded-xl transition-colors"
           title={t("settings")}
+          aria-label={t("settings")}
         >
           <svg
             className="w-5 h-5 text-secondary"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -144,13 +146,15 @@ function App() {
       </header>
 
       {/* Tab navigation */}
-      <div className="flex border-b border-[var(--border-color)] mb-4">
+      <div className="flex border-b border-[var(--border-color)] mb-4" role="tablist">
         <button
           onClick={() => setActiveTab("scan")}
           className={`tab-button ${activeTab === "scan" ? "active" : ""}`}
+          aria-selected={activeTab === "scan"}
+          role="tab"
         >
           <span className="flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             {t("scanTab")}
@@ -159,9 +163,11 @@ function App() {
         <button
           onClick={() => setActiveTab("map")}
           className={`tab-button ${activeTab === "map" ? "active" : ""}`}
+          aria-selected={activeTab === "map"}
+          role="tab"
         >
           <span className="flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
             </svg>
             {t("mapTab")}

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-03-10
+
+### Added
+- GUI: Trash management commands (list, restore, delete, empty, stats)
+- GUI: Schedule management commands (list, create, remove, enable, disable)
+
+### Fixed
+- Missing `which` crate dependency for cross-platform binary detection
+- Clippy lint warnings and code formatting
+
 ## [0.7.0] - 2026-03-10
 
 ### Added
@@ -94,7 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Risk level classification (Safe, Moderate, Risky)
 - Dry-run mode for safe preview
 
-[Unreleased]: https://github.com/phpfc/cleanser/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/phpfc/cleanser/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/phpfc/cleanser/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/phpfc/cleanser/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/phpfc/cleanser/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/phpfc/cleanser/compare/v0.5.1...v0.5.2

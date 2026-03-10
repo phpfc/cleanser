@@ -634,7 +634,9 @@ pub fn get_scheduled_jobs() -> Result<Vec<ScheduledJobDto>, String> {
             enabled: j.enabled,
             use_trash: j.use_trash,
             secure_delete: j.secure_delete,
-            last_run: j.last_run.map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()),
+            last_run: j
+                .last_run
+                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()),
         })
         .collect())
 }

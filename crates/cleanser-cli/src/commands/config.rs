@@ -32,7 +32,11 @@ pub fn set(key: &str, value: &str) -> Result<()> {
             );
         }
         _ => {
-            eprintln!("{} Unknown configuration key: {}", "error:".red().bold(), key);
+            eprintln!(
+                "{} Unknown configuration key: {}",
+                "error:".red().bold(),
+                key
+            );
             eprintln!();
             eprintln!("Available keys:");
             eprintln!("  check-updates    Enable/disable automatic update checks");
@@ -51,7 +55,11 @@ pub fn get(key: &str) -> Result<()> {
             println!("{}", config.check_updates);
         }
         _ => {
-            eprintln!("{} Unknown configuration key: {}", "error:".red().bold(), key);
+            eprintln!(
+                "{} Unknown configuration key: {}",
+                "error:".red().bold(),
+                key
+            );
             eprintln!();
             eprintln!("Available keys:");
             eprintln!("  check-updates    Enable/disable automatic update checks");

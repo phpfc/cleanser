@@ -238,12 +238,12 @@ fn test_scan_handles_unicode_paths() {
 
     // Create directories with Unicode characters
     let unicode_dirs = vec![
-        ".cache/日本語",           // Japanese
-        ".cache/中文",             // Chinese
-        ".cache/한국어",           // Korean
-        ".cache/émojis_🦀",        // Emoji
-        ".cache/résumé",           // Accented chars
-        ".cache/путь",             // Cyrillic
+        ".cache/日本語",    // Japanese
+        ".cache/中文",      // Chinese
+        ".cache/한국어",    // Korean
+        ".cache/émojis_🦀", // Emoji
+        ".cache/résumé",    // Accented chars
+        ".cache/путь",      // Cyrillic
     ];
 
     for dir in &unicode_dirs {
@@ -254,13 +254,8 @@ fn test_scan_handles_unicode_paths() {
     }
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should succeed with Unicode paths");
-
-    // Verify scan completed without panic
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle Unicode paths gracefully"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle Unicode paths");
 }
 
 #[test]
@@ -280,13 +275,8 @@ fn test_scan_handles_deep_nesting() {
     fs::write(deep_path.join("deep_file.bin"), data).unwrap();
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should succeed with deep nesting");
-
-    // Verify scan completed
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle deep directory nesting"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle deep nesting");
 }
 
 #[test]
@@ -303,14 +293,8 @@ fn test_scan_handles_empty_directories() {
     fs::write(base_path.join("package.json"), r#"{"name": "test"}"#).unwrap();
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should succeed with empty directories");
-
-    // Empty directories should be handled gracefully
-    // They may or may not appear in results depending on size threshold
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle empty directories"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle empty directories");
 }
 
 #[test]
@@ -334,13 +318,8 @@ fn test_scan_handles_symlinks_within_temp() {
     }
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should handle symlinks");
-
-    // Verify scan completed without following symlinks into loops
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle symlinks gracefully"
-    );
+    // Test passes if scan completes without panic or infinite loops
+    let _results = scan(config).expect("Scan should handle symlinks");
 }
 
 #[test]
@@ -367,12 +346,8 @@ fn test_scan_handles_special_characters_in_filenames() {
     }
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should handle special characters");
-
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle special characters in filenames"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle special characters");
 }
 
 #[test]
@@ -389,12 +364,8 @@ fn test_scan_handles_very_long_filenames() {
     let _ = fs::write(base_path.join(".cache").join(&long_name), data);
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should handle long filenames");
-
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle very long filenames"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle long filenames");
 }
 
 #[test]
@@ -409,13 +380,8 @@ fn test_scan_handles_zero_byte_files() {
     fs::write(base_path.join(".cache/empty2.bin"), "").unwrap();
 
     let config = create_scan_config(&temp_dir, 0);
-    let results = scan(config).expect("Scan should handle zero-byte files");
-
-    // Zero-byte files should not appear in results (below size threshold)
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle zero-byte files gracefully"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle zero-byte files");
 }
 
 #[test]
@@ -431,15 +397,8 @@ fn test_scan_nonexistent_path() {
         age_criteria: None,
     };
 
-    // Scan should still succeed (just find nothing)
-    let results = scan(config).expect("Scan should handle nonexistent paths");
-
-    // No items should be found from nonexistent path
-    // But the global map might still return results from system
-    assert!(
-        true, // scan completed successfully
-        "Scan should handle nonexistent paths"
-    );
+    // Test passes if scan completes without panic
+    let _results = scan(config).expect("Scan should handle nonexistent paths");
 }
 
 #[test]
@@ -495,7 +454,7 @@ fn test_scan_with_size_range_filter() {
         // Items should be within the size range (or be directories that aggregate)
         if item.path.is_file() {
             assert!(
-                item.size >= 1 * 1024 * 1024 && item.size <= 10 * 1024 * 1024,
+                item.size >= 1024 * 1024 && item.size <= 10 * 1024 * 1024,
                 "File items should be within size range: {} bytes",
                 item.size
             );
@@ -526,6 +485,7 @@ fn test_multiple_concurrent_scans() {
     // All scans should complete without deadlock
     for handle in handles {
         let results = handle.join().expect("Thread should complete");
-        assert!(true, // scan completed successfully "Each scan should return results");
+        // Verify scan completed successfully
+        let _ = results;
     }
 }

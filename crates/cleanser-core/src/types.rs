@@ -506,11 +506,7 @@ impl WhitelistConfig {
 
         // Canonicalize to resolve symlinks and normalize the path
         let canonical_path = absolute_path.canonicalize().map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to resolve path {}: {}",
-                absolute_path.display(),
-                e
-            )
+            anyhow::anyhow!("Failed to resolve path {}: {}", absolute_path.display(), e)
         })?;
 
         self.whitelist.insert(canonical_path);

@@ -85,6 +85,6 @@ pub use types::parse_duration;
 pub use utils::get_dir_size;
 
 // Re-export version utilities
-pub use version::{current_version, VersionInfo};
 #[cfg(feature = "update-check")]
 pub use version::{check_for_updates, check_for_updates_background, check_for_updates_sync};
+pub use version::{current_version, VersionInfo};

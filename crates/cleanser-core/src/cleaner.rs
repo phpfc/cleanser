@@ -226,13 +226,11 @@ fn delete_item(path: &Path) -> Result<u64> {
     }
 
     // Safety check: verify no symlinks point outside the directory
-    if path.is_dir() {
-        if contains_external_symlinks(path)? {
-            anyhow::bail!(
-                "Directory contains symlinks pointing outside. Refusing to delete for safety: {}",
-                path.display()
-            );
-        }
+    if path.is_dir() && contains_external_symlinks(path)? {
+        anyhow::bail!(
+            "Directory contains symlinks pointing outside. Refusing to delete for safety: {}",
+            path.display()
+        );
     }
 
     // Calculate size before deletion

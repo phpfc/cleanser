@@ -326,7 +326,6 @@ fn check_log_file(path: &Path, log_regex: &Regex) -> Option<CleanableItem> {
 /// 1. Group by size + partial hash (first and last 4KB) for quick pre-filtering
 /// 2. Full SHA256 hash only for files that match in phase 1
 fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableItem>> {
-
     // Phase 1: Group files by size
     let mut size_groups: HashMap<u64, Vec<PathBuf>> = HashMap::new();
 
@@ -362,10 +361,7 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
 
         for path in file_paths {
             if let Ok(partial) = compute_partial_hash(&path, size) {
-                partial_hash_groups
-                    .entry(partial)
-                    .or_default()
-                    .push(path);
+                partial_hash_groups.entry(partial).or_default().push(path);
             }
         }
     }

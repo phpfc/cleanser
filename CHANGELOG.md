@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-03-10
+
+### Added
+- GUI: Version check indicator with update notification in header
+- GUI: Trash View tab for managing recoverable deleted items
+- GUI: Schedule View tab for creating and managing cleanup jobs
+- GUI: Full translations (EN/PT-BR) for new features
+
 ## [0.7.1] - 2026-03-10
 
 ### Added
@@ -104,7 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Risk level classification (Safe, Moderate, Risky)
 - Dry-run mode for safe preview
 
-[Unreleased]: https://github.com/phpfc/cleanser/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/phpfc/cleanser/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/phpfc/cleanser/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/phpfc/cleanser/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/phpfc/cleanser/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/phpfc/cleanser/compare/v0.5.2...v0.6.0

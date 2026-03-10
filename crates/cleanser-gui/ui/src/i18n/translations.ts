@@ -46,6 +46,11 @@ export const translations = {
 
     // Settings
     settings: "Settings",
+    scanSettings: "Scan Settings",
+    minFileSize: "Minimum file size (MB)",
+    minFileSizeDescription: "Only detect files larger than this size",
+    findDuplicates: "Find duplicate files",
+    findDuplicatesDescription: "Scan for duplicate files (slower)",
     systemInfo: "System Information",
     platform: "Platform:",
     home: "Home:",
@@ -129,6 +134,11 @@ export const translations = {
 
     // Settings
     settings: "Configurações",
+    scanSettings: "Configurações de Scan",
+    minFileSize: "Tamanho mínimo do arquivo (MB)",
+    minFileSizeDescription: "Detectar apenas arquivos maiores que este tamanho",
+    findDuplicates: "Encontrar arquivos duplicados",
+    findDuplicatesDescription: "Procurar arquivos duplicados (mais lento)",
     systemInfo: "Informações do Sistema",
     platform: "Plataforma:",
     home: "Home:",

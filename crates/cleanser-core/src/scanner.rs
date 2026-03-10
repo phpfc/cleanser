@@ -7,6 +7,7 @@ use crate::mapper::filesystem_map::{DirectoryCategory, MappedDirectory};
 use crate::mapper::{FileSystemCrawler, FileSystemMap};
 use crate::progress::{NoOpProgress, ProgressCallback, ScanPhase, ScanProgress};
 use crate::types::*;
+use crate::utils::get_dir_size;
 use anyhow::Result;
 use rayon::prelude::*;
 use regex::Regex;
@@ -15,6 +16,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 use walkdir::WalkDir;
 
 /// Scan using default settings (no progress callback)
@@ -67,7 +69,9 @@ pub fn scan_with_progress(
         }
 
         // Save the updated map
-        let _ = fs_map.save();
+        if let Err(e) = fs_map.save() {
+            warn!("Failed to save filesystem map: {}", e);
+        }
     }
 
     progress.on_scan_progress(ScanProgress {
@@ -318,28 +322,13 @@ fn check_log_file(path: &Path, log_regex: &Regex) -> Option<CleanableItem> {
     None
 }
 
-/// Get the total size of a directory
-pub fn get_dir_size(path: &Path) -> Result<u64> {
-    let mut total_size = 0u64;
-
-    for entry in WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total_size += metadata.len();
-            }
-        }
-    }
-
-    Ok(total_size)
-}
-
-/// Find duplicate files using SHA256 hashing
+/// Find duplicate files using a two-phase approach:
+/// 1. Group by size + partial hash (first and last 4KB) for quick pre-filtering
+/// 2. Full SHA256 hash only for files that match in phase 1
 fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableItem>> {
-    let mut file_hashes: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
+    // Phase 1: Group files by size
+    let mut size_groups: HashMap<u64, Vec<PathBuf>> = HashMap::new();
 
     for base_path in paths {
         for entry in WalkDir::new(base_path)
@@ -351,25 +340,57 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
             if entry.file_type().is_file() {
                 if let Ok(metadata) = entry.metadata() {
                     let size = metadata.len();
-                    // Only hash files larger than 1MB to save time
+                    // Only consider files larger than 1MB
                     if size > 1024 * 1024 {
-                        if let Ok(hash) = hash_file(entry.path()) {
-                            file_hashes
-                                .entry(hash)
-                                .or_default()
-                                .push(entry.path().to_path_buf());
-                        }
+                        size_groups
+                            .entry(size)
+                            .or_default()
+                            .push(entry.path().to_path_buf());
                     }
                 }
             }
         }
     }
 
+    // Phase 2: For groups with multiple files, compute partial hash
+    let mut partial_hash_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
+    for (size, file_paths) in size_groups {
+        if file_paths.len() < 2 {
+            continue; // No duplicates possible
+        }
+
+        for path in file_paths {
+            if let Ok(partial) = compute_partial_hash(&path, size) {
+                partial_hash_groups
+                    .entry(partial)
+                    .or_default()
+                    .push(path);
+            }
+        }
+    }
+
+    // Phase 3: For files with matching partial hash, compute full hash
+    let mut full_hash_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
+    for (_, file_paths) in partial_hash_groups {
+        if file_paths.len() < 2 {
+            continue; // No duplicates possible
+        }
+
+        for path in file_paths {
+            if let Ok(hash) = hash_file_full(&path) {
+                full_hash_groups.entry(hash).or_default().push(path);
+            }
+        }
+    }
+
+    // Build duplicate items
     let mut duplicates = Vec::new();
-    for (_, paths) in file_hashes.iter() {
-        if paths.len() > 1 {
+    for (_, dup_paths) in full_hash_groups.iter() {
+        if dup_paths.len() > 1 {
             // Keep the first file, mark others as duplicates
-            for path in paths.iter().skip(1) {
+            for path in dup_paths.iter().skip(1) {
                 if let Ok(metadata) = fs::metadata(path) {
                     duplicates.push(CleanableItem {
                         path: path.clone(),
@@ -378,7 +399,7 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
                         risk_level: RiskLevel::Risky,
                         description: format!(
                             "Duplicate of: {}",
-                            paths[0]
+                            dup_paths[0]
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
                                 .unwrap_or_else(|| "unknown".to_string())
@@ -392,8 +413,35 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
     Ok(duplicates)
 }
 
-/// Hash a file using SHA256
-fn hash_file(path: &Path) -> Result<String> {
+/// Compute a partial hash using first 4KB + last 4KB of the file
+/// This is much faster than hashing the entire file and catches most differences
+fn compute_partial_hash(path: &Path, file_size: u64) -> Result<String> {
+    use std::io::{Seek, SeekFrom};
+
+    const BLOCK_SIZE: usize = 4096;
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+
+    // Include file size in hash to differentiate same-content-different-size edge cases
+    hasher.update(file_size.to_le_bytes());
+
+    // Read first block
+    let mut buffer = [0u8; BLOCK_SIZE];
+    let first_read = file.read(&mut buffer)?;
+    hasher.update(&buffer[..first_read]);
+
+    // Read last block (if file is large enough to have a different last block)
+    if file_size > BLOCK_SIZE as u64 * 2 {
+        file.seek(SeekFrom::End(-(BLOCK_SIZE as i64)))?;
+        let last_read = file.read(&mut buffer)?;
+        hasher.update(&buffer[..last_read]);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Hash entire file using SHA256
+fn hash_file_full(path: &Path) -> Result<String> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0; 8192];

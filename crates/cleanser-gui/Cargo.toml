@@ -10,7 +10,7 @@ description = "Desktop GUI for Cleanser disk cleanup tool"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-cleanser-core = { path = "../cleanser-core" }
+cleanser-core = { path = "../cleanser-core", features = ["update-check"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"

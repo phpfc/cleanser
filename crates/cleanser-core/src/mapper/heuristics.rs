@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::filesystem_map::{DirectoryCategory, MappedDirectory};
 use crate::platform::detection::*;
 use std::path::Path;

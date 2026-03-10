@@ -44,6 +44,8 @@ pub mod platform;
 pub mod progress;
 pub mod scanner;
 pub mod types;
+pub mod utils;
+pub mod version;
 
 // Re-export main types
 pub use types::{
@@ -78,3 +80,11 @@ pub use mapper::{
 
 // Re-export duration parser
 pub use types::parse_duration;
+
+// Re-export utility functions
+pub use utils::get_dir_size;
+
+// Re-export version utilities
+pub use version::{current_version, VersionInfo};
+#[cfg(feature = "update-check")]
+pub use version::{check_for_updates, check_for_updates_background, check_for_updates_sync};

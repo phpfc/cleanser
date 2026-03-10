@@ -483,19 +483,35 @@ impl WhitelistConfig {
     pub fn add_path(&mut self, path: PathBuf) -> anyhow::Result<()> {
         // Convert to absolute path if relative
         let absolute_path = if path.is_absolute() {
-            path
+            path.clone()
         } else {
             std::env::current_dir()?.join(&path)
         };
 
+        // Verify the path exists
+        if !absolute_path.exists() {
+            anyhow::bail!(
+                "Path does not exist: {}. Cannot add non-existent paths to whitelist.",
+                absolute_path.display()
+            );
+        }
+
+        // Verify it's a directory (whitelist is for directories)
+        if !absolute_path.is_dir() {
+            anyhow::bail!(
+                "Path is not a directory: {}. Whitelist only supports directories.",
+                absolute_path.display()
+            );
+        }
+
         // Canonicalize to resolve symlinks and normalize the path
-        let canonical_path = match absolute_path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => {
-                // If canonicalize fails (e.g., path doesn't exist), use the absolute path as-is
-                absolute_path
-            }
-        };
+        let canonical_path = absolute_path.canonicalize().map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to resolve path {}: {}",
+                absolute_path.display(),
+                e
+            )
+        })?;
 
         self.whitelist.insert(canonical_path);
         self.save()?;

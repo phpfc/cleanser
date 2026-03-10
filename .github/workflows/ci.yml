@@ -11,8 +11,12 @@ env:
 
 jobs:
   test:
-    name: Test
-    runs-on: macos-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +49,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -79,13 +83,30 @@ jobs:
         run: cargo clippy --workspace --exclude cleanser-gui --all-targets -- -D warnings
 
   build:
-    name: Build
-    runs-on: macos-latest
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
+        include:
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            can_test: false  # Cross-compiled, can't run
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            can_test: true   # Native on M1 runners
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            can_test: true   # Native
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            can_test: false  # Cross-compiled
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            can_test: true   # Native
     steps:
       - uses: actions/checkout@v4
 
@@ -93,6 +114,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation dependencies (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -114,12 +141,37 @@ jobs:
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }} -p cleanser
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - name: Upload artifact
+      # Smoke tests - verify the binary works
+      - name: Smoke test (Unix)
+        if: matrix.can_test && runner.os != 'Windows'
+        run: |
+          ./target/${{ matrix.target }}/release/cleanser --version
+          ./target/${{ matrix.target }}/release/cleanser --help
+          ./target/${{ matrix.target }}/release/cleanser config list
+
+      - name: Smoke test (Windows)
+        if: matrix.can_test && runner.os == 'Windows'
+        run: |
+          .\target\${{ matrix.target }}\release\cleanser.exe --version
+          .\target\${{ matrix.target }}\release\cleanser.exe --help
+          .\target\${{ matrix.target }}\release\cleanser.exe config list
+
+      - name: Upload artifact (Unix)
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: cleanser-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/cleanser
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanser-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/cleanser.exe
 
   auto-release:
     name: Auto Release
@@ -127,10 +179,20 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
+      - name: Check for HOMEBREW_TAP_TOKEN
+        id: check_token
+        run: |
+          if [ -n "${{ secrets.HOMEBREW_TAP_TOKEN }}" ]; then
+            echo "has_token=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_token=false" >> $GITHUB_OUTPUT
+            echo "::warning::HOMEBREW_TAP_TOKEN not set. Auto-release will use default GITHUB_TOKEN which may have limited permissions."
+          fi
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || github.token }}
 
       - name: Get version from Cargo.toml
         id: get_version

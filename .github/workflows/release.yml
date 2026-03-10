@@ -171,6 +171,8 @@ jobs:
             | Linux | x86_64 | `Cleanser-${{ steps.get_version.outputs.version }}-x86_64.AppImage` or `cleanser-gui_${{ steps.get_version.outputs.version }}_amd64.deb` |
             | Windows | x86_64 | `Cleanser-${{ steps.get_version.outputs.version }}-x64-setup.exe` |
 
+            > **macOS Note:** The app is ad-hoc signed. On first launch, right-click the app and select "Open", or run `xattr -cr /Applications/Cleanser.app` in Terminal.
+
             ## ⌨️ CLI Tool (Command Line)
 
             ### Homebrew (macOS)
@@ -316,22 +318,39 @@ jobs:
           projectPath: crates/cleanser-gui
           args: --target ${{ matrix.target }}
 
-      - name: Rename and upload DMG
+      - name: Ad-hoc sign and recreate DMG
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
           TARGET="${{ matrix.target }}"
 
-          # Find the DMG file (tauri builds to root target/, not crates/cleanser-gui/target/)
-          DMG_FILE=$(find target/$TARGET/release/bundle/dmg -name "*.dmg" 2>/dev/null | head -1)
+          # Find the .app bundle
+          APP_BUNDLE=$(find target/$TARGET/release/bundle/macos -name "*.app" -type d 2>/dev/null | head -1)
 
-          if [ -n "$DMG_FILE" ]; then
-            NEW_NAME="Cleanser-${VERSION}-${TARGET}.dmg"
-            cp "$DMG_FILE" "$NEW_NAME"
-            shasum -a 256 "$NEW_NAME" > "${NEW_NAME}.sha256"
-            echo "Created $NEW_NAME"
+          if [ -n "$APP_BUNDLE" ]; then
+            echo "Found app bundle: $APP_BUNDLE"
+
+            # Ad-hoc sign the app bundle
+            echo "Signing app bundle..."
+            codesign --force --deep --sign - "$APP_BUNDLE"
+
+            # Verify signature
+            echo "Verifying signature..."
+            codesign --verify --verbose "$APP_BUNDLE"
+
+            # Create a new DMG with the signed app
+            APP_NAME=$(basename "$APP_BUNDLE")
+            NEW_DMG="Cleanser-${VERSION}-${TARGET}.dmg"
+
+            echo "Creating DMG with signed app..."
+            hdiutil create -volname "Cleanser" -srcfolder "$APP_BUNDLE" -ov -format UDZO "$NEW_DMG"
+
+            # Create checksum
+            shasum -a 256 "$NEW_DMG" > "${NEW_DMG}.sha256"
+            echo "Created $NEW_DMG"
           else
-            echo "Warning: DMG not found in target/$TARGET/release/bundle/dmg"
-            find target -name "*.dmg" 2>/dev/null || echo "No DMG files found anywhere"
+            echo "Warning: No .app bundle found"
+            find target -name "*.app" -type d 2>/dev/null || echo "No .app bundles found anywhere"
+            exit 1
           fi
 
       - name: Upload DMG to release

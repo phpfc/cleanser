@@ -39,10 +39,12 @@
 
 pub mod cache;
 pub mod cleaner;
+pub mod deletion;
 pub mod mapper;
 pub mod platform;
 pub mod progress;
 pub mod scanner;
+pub mod scheduler;
 pub mod types;
 pub mod utils;
 pub mod version;
@@ -53,6 +55,15 @@ pub use types::{
     ScanResults, ScanSpeed, SizeRange, WhitelistConfig,
 };
 
+// Re-export deletion types
+pub use deletion::{
+    DeletionMethod, DeletionProgress, SecureDeleteConfig, SecureDeletePattern, SecureDeleter,
+    TrashConfig, TrashEntry, TrashJournal, TrashManager,
+};
+
+// Re-export scheduler types
+pub use scheduler::{ScheduleConfig, ScheduleFrequency, ScheduledJob, ScheduledJobResult, Scheduler};
+
 // Re-export progress types
 pub use progress::{
     CleanPhase, CleanProgress, NoOpProgress, ProgressCallback, ScanPhase, ScanProgress,
@@ -60,7 +71,8 @@ pub use progress::{
 
 // Re-export main functions
 pub use cleaner::{
-    clean, clean_with_progress, delete_items, delete_items_with_progress, filter_by_risk,
+    clean, clean_with_config, clean_with_progress, delete_items, delete_items_with_method,
+    delete_items_with_progress, filter_by_risk, CleanConfig,
 };
 pub use scanner::{scan, scan_with_progress};
 

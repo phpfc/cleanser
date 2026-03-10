@@ -91,6 +91,18 @@ enum Commands {
         /// Interactive mode - prompt for each large file
         #[arg(long)]
         interactive: bool,
+
+        /// Securely delete files by overwriting data before removal
+        #[arg(long)]
+        secure: bool,
+
+        /// Number of secure delete passes (1, 3, 7, or 35 for Gutmann)
+        #[arg(long, default_value = "3")]
+        secure_passes: u8,
+
+        /// Move files to trash instead of permanent deletion
+        #[arg(long)]
+        trash: bool,
     },
     /// Manage whitelist of directories to never scan or clean
     Whitelist {
@@ -111,6 +123,16 @@ enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
+    },
+    /// Manage trash/recycle bin
+    Trash {
+        #[command(subcommand)]
+        action: TrashAction,
+    },
+    /// Manage scheduled cleanup jobs
+    Schedule {
+        #[command(subcommand)]
+        action: ScheduleAction,
     },
 }
 
@@ -176,6 +198,119 @@ enum ConfigAction {
     },
     /// List all configuration values
     List,
+}
+
+#[derive(Subcommand)]
+enum TrashAction {
+    /// List items in trash
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restore item from trash
+    Restore {
+        /// Entry ID (or partial ID)
+        entry: String,
+        /// Restore to different location
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+    /// Permanently delete item from trash
+    Delete {
+        /// Entry ID (or partial ID)
+        entry: String,
+        /// Use secure delete
+        #[arg(long)]
+        secure: bool,
+    },
+    /// Empty entire trash
+    Empty {
+        /// Skip confirmation
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// Use secure delete for all items
+        #[arg(long)]
+        secure: bool,
+    },
+    /// Show trash statistics
+    Stats,
+}
+
+#[derive(Subcommand)]
+enum ScheduleAction {
+    /// Create a new scheduled job
+    Set {
+        /// Job name
+        name: String,
+
+        /// Schedule frequency (hourly, daily@09:00, weekly@Mon,Wed,Fri@14:30, etc.)
+        #[arg(short, long)]
+        frequency: String,
+
+        /// Maximum risk level (safe, moderate, risky)
+        #[arg(short, long, default_value = "safe")]
+        risk: RiskLevelArg,
+
+        /// Paths to scan (defaults to home)
+        #[arg(long)]
+        paths: Vec<PathBuf>,
+
+        /// Use trash instead of permanent delete
+        #[arg(long)]
+        trash: bool,
+
+        /// Use secure delete
+        #[arg(long)]
+        secure: bool,
+
+        /// Secure delete passes
+        #[arg(long, default_value = "3")]
+        secure_passes: u8,
+
+        /// Send notification on completion
+        #[arg(long)]
+        notify: bool,
+    },
+    /// List all scheduled jobs
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a scheduled job
+    Remove {
+        /// Job name or ID
+        job: String,
+    },
+    /// Enable a scheduled job
+    Enable {
+        /// Job name or ID
+        job: String,
+    },
+    /// Disable a scheduled job
+    Disable {
+        /// Job name or ID
+        job: String,
+    },
+    /// Show job run history
+    History {
+        /// Job name (optional, shows all if not specified)
+        job: Option<String>,
+
+        /// Number of entries to show
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+    /// Run a job immediately
+    Run {
+        /// Job name or ID
+        job: String,
+
+        /// Dry run
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 // Clap-compatible wrappers for core types
@@ -282,7 +417,19 @@ fn main() -> anyhow::Result<()> {
             dry_run,
             force_scan,
             interactive,
-        } => commands::clean::execute(risk.into(), yes, dry_run, force_scan, interactive),
+            secure,
+            secure_passes,
+            trash,
+        } => commands::clean::execute(
+            risk.into(),
+            yes,
+            dry_run,
+            force_scan,
+            interactive,
+            secure,
+            secure_passes,
+            trash,
+        ),
         Commands::Whitelist { action } => match action {
             WhitelistAction::Add { path } => commands::whitelist::add(path),
             WhitelistAction::Remove { path } => commands::whitelist::remove(path),
@@ -306,6 +453,40 @@ fn main() -> anyhow::Result<()> {
             ConfigAction::Set { key, value } => commands::config::set(&key, &value),
             ConfigAction::Get { key } => commands::config::get(&key),
             ConfigAction::List => commands::config::list(),
+        },
+        Commands::Trash { action } => match action {
+            TrashAction::List { json } => commands::trash::list(json),
+            TrashAction::Restore { entry, to } => commands::trash::restore(entry, to),
+            TrashAction::Delete { entry, secure } => commands::trash::delete(entry, secure),
+            TrashAction::Empty { yes, secure } => commands::trash::empty(yes, secure),
+            TrashAction::Stats => commands::trash::stats(),
+        },
+        Commands::Schedule { action } => match action {
+            ScheduleAction::Set {
+                name,
+                frequency,
+                risk,
+                paths,
+                trash,
+                secure,
+                secure_passes,
+                notify,
+            } => commands::schedule::set(
+                name,
+                frequency,
+                risk.into(),
+                paths,
+                trash,
+                secure,
+                secure_passes,
+                notify,
+            ),
+            ScheduleAction::List { json } => commands::schedule::list(json),
+            ScheduleAction::Remove { job } => commands::schedule::remove(job),
+            ScheduleAction::Enable { job } => commands::schedule::enable(job),
+            ScheduleAction::Disable { job } => commands::schedule::disable(job),
+            ScheduleAction::History { job, limit } => commands::schedule::history(job, limit),
+            ScheduleAction::Run { job, dry_run } => commands::schedule::run(job, dry_run),
         },
     };
 

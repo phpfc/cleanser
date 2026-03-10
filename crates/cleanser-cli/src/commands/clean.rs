@@ -1,8 +1,9 @@
 use crate::progress::CliProgress;
 use crate::tui;
 use cleanser_core::{
-    self as core, delete_items, filter_by_risk, get_cache_age, load_scan_results,
-    update_cache_after_deletion, RiskLevel, ScanResults, ScanSpeed,
+    self as core, delete_items_with_method, filter_by_risk, get_cache_age, load_scan_results,
+    update_cache_after_deletion, CleanConfig, DeletionMethod, RiskLevel, ScanResults, ScanSpeed,
+    SecureDeleteConfig,
 };
 use colored::Colorize;
 use humansize::{format_size, BINARY};
@@ -14,7 +15,41 @@ pub fn execute(
     dry_run: bool,
     force_scan: bool,
     interactive: bool,
+    secure: bool,
+    secure_passes: u8,
+    trash: bool,
 ) -> anyhow::Result<()> {
+    // Determine deletion method
+    let deletion_method = if trash {
+        DeletionMethod::Trash
+    } else if secure {
+        DeletionMethod::Secure(SecureDeleteConfig::with_passes(secure_passes))
+    } else {
+        DeletionMethod::Standard
+    };
+
+    // Print deletion mode info
+    match &deletion_method {
+        DeletionMethod::Secure(config) => {
+            println!(
+                "{}",
+                format!(
+                    "SECURE DELETE MODE - {} overwrite passes",
+                    config.passes
+                )
+                .yellow()
+                .bold()
+            );
+        }
+        DeletionMethod::Trash => {
+            println!(
+                "{}",
+                "TRASH MODE - Files will be moved to trash".yellow().bold()
+            );
+        }
+        DeletionMethod::Standard => {}
+    }
+
     if dry_run {
         println!("{}", "DRY RUN MODE - No files will be deleted".yellow());
     }
@@ -26,11 +61,18 @@ pub fn execute(
 
     // If interactive mode, handle files interactively based on risk level
     if interactive {
-        return handle_interactive_clean(risk, dry_run, force_scan);
+        return handle_interactive_clean(risk, dry_run, force_scan, &deletion_method);
     }
 
     if !yes && !dry_run {
-        println!("{}", "This will delete files. Continue? (y/N)".yellow());
+        let confirm_msg = match &deletion_method {
+            DeletionMethod::Secure(_) => {
+                "This will SECURELY delete files (data will be overwritten). Continue? (y/N)"
+            }
+            DeletionMethod::Trash => "This will move files to trash. Continue? (y/N)",
+            DeletionMethod::Standard => "This will delete files. Continue? (y/N)",
+        };
+        println!("{}", confirm_msg.yellow());
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         if !input.trim().eq_ignore_ascii_case("y") {
@@ -39,8 +81,15 @@ pub fn execute(
         }
     }
 
+    let config = CleanConfig {
+        max_risk: risk,
+        dry_run,
+        force_scan,
+        deletion_method,
+    };
+
     let progress = CliProgress::new_spinner();
-    let result = core::clean_with_progress(risk, dry_run, force_scan, &progress)?;
+    let result = core::clean_with_config(config, &progress)?;
     progress.finish();
 
     println!("\n{}", "=== Cleanup Summary ===".green().bold());
@@ -64,6 +113,7 @@ fn handle_interactive_clean(
     risk: RiskLevel,
     dry_run: bool,
     force_scan: bool,
+    deletion_method: &DeletionMethod,
 ) -> anyhow::Result<()> {
     // Try to load from cache first, unless force_scan is specified
     let results = if !force_scan {
@@ -161,7 +211,12 @@ fn handle_interactive_clean(
             })
             .collect();
 
-        let result = delete_items(&items_to_delete, false)?;
+        let result = delete_items_with_method(
+            &items_to_delete,
+            false,
+            deletion_method,
+            &crate::progress::CliProgress::new_spinner(),
+        )?;
 
         println!("\n=== Deletion Summary ===");
         println!("{}: {}", "Deleted".green(), result.cleaned_count);

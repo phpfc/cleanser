@@ -239,8 +239,16 @@ mod tests {
     fn test_current_version_format() {
         let version = current_version();
         assert!(!version.is_empty());
-        // Should be valid semver
-        assert!(semver::Version::parse(version).is_ok());
+        // Should look like semver (X.Y.Z format)
+        let parts: Vec<&str> = version.split('.').collect();
+        assert_eq!(parts.len(), 3, "Version should have 3 parts: {}", version);
+        for part in parts {
+            assert!(
+                part.parse::<u32>().is_ok(),
+                "Version part should be numeric: {}",
+                part
+            );
+        }
     }
 
     #[test]

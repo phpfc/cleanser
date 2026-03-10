@@ -34,8 +34,7 @@ pub fn get_dir_size(path: &Path) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::{self, File};
-    use std::io::Write;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
@@ -49,13 +48,13 @@ mod tests {
     fn test_get_dir_size_with_files() {
         let dir = tempdir().unwrap();
 
-        // Create a file with known content
+        // Create a file with known content using fs::write (ensures file is closed)
         let file_path = dir.path().join("test.txt");
-        let mut file = File::create(&file_path).unwrap();
-        file.write_all(b"Hello, World!").unwrap(); // 13 bytes
+        let content = b"Hello, World!"; // 13 bytes
+        fs::write(&file_path, content).unwrap();
 
         let size = get_dir_size(dir.path()).unwrap();
-        assert_eq!(size, 13);
+        assert_eq!(size, content.len() as u64);
     }
 
     #[test]
@@ -66,16 +65,13 @@ mod tests {
         let subdir = dir.path().join("subdir");
         fs::create_dir(&subdir).unwrap();
 
-        let file1 = dir.path().join("file1.txt");
-        let file2 = subdir.join("file2.txt");
+        let content1 = b"12345"; // 5 bytes
+        let content2 = b"1234567890"; // 10 bytes
 
-        let mut f1 = File::create(&file1).unwrap();
-        f1.write_all(b"12345").unwrap(); // 5 bytes
-
-        let mut f2 = File::create(&file2).unwrap();
-        f2.write_all(b"1234567890").unwrap(); // 10 bytes
+        fs::write(dir.path().join("file1.txt"), content1).unwrap();
+        fs::write(subdir.join("file2.txt"), content2).unwrap();
 
         let size = get_dir_size(dir.path()).unwrap();
-        assert_eq!(size, 15);
+        assert_eq!(size, (content1.len() + content2.len()) as u64);
     }
 }

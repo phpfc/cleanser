@@ -1,39 +1,53 @@
-import { useState, useCallback } from "react";
-import { useScan } from "./hooks/useScan";
-import { useClean } from "./hooks/useClean";
-import { useVersion } from "./hooks/useVersion";
+import { useState, useEffect } from "react";
+import { useAppStore } from "./store/appStore";
 import { ProgressBar } from "./components/ProgressBar";
 import { ScanView } from "./components/ScanView";
 import { Settings } from "./components/Settings";
 import { MapView } from "./components/MapView";
 import { TrashView } from "./components/TrashView";
 import { ScheduleView } from "./components/ScheduleView";
+import { useVersion } from "./hooks/useVersion";
 import { useI18n } from "./i18n";
 import type { ScanConfig } from "./types";
-import { formatSize } from "./utils";
 
 type ScanSpeed = "quick" | "normal" | "thorough";
 type Tab = "scan" | "map" | "trash" | "schedule";
 
-// Default scan settings
-const DEFAULT_MIN_FILE_SIZE_MB = 100;
-
 function App() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>("scan");
-  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [speed, setSpeed] = useState<ScanSpeed>("normal");
-  const [minFileSizeMb, setMinFileSizeMb] = useState(DEFAULT_MIN_FILE_SIZE_MB);
-  const [findDuplicates, setFindDuplicates] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-
-  const { results, isScanning, progress: scanProgress, error: scanError, scan, clearResults } = useScan();
-  const { isCleaning, progress: cleanProgress, result: cleanResult, error: cleanError, cleanItems, clearResult } = useClean();
   const { versionInfo } = useVersion();
 
+  // Zustand store
+  const {
+    scanResults,
+    isScanning,
+    scanProgress,
+    scanError,
+    isCleaning,
+    cleanProgress,
+    cleanResult,
+    cleanError,
+    selectedPaths,
+    minFileSizeMb,
+    findDuplicates,
+    scan,
+    clearScanResults,
+    cleanItems,
+    clearCleanResult,
+    setMinFileSizeMb,
+    setFindDuplicates,
+    initialize,
+  } = useAppStore();
+
+  // Initialize store on mount
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
   const handleScan = async () => {
-    setSelectedPaths(new Set());
-    clearResult();
     const config: ScanConfig = {
       speed,
       min_file_size_mb: minFileSizeMb,
@@ -46,50 +60,12 @@ function App() {
     }
   };
 
-  const handleToggleItem = useCallback((path: string) => {
-    setSelectedPaths((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleToggleCategory = useCallback(
-    (category: string, selected: boolean) => {
-      if (!results) return;
-
-      setSelectedPaths((prev) => {
-        const next = new Set(prev);
-        const categoryItems = results.items.filter(
-          (item) => item.category === category
-        );
-
-        for (const item of categoryItems) {
-          if (selected) {
-            next.add(item.path);
-          } else {
-            next.delete(item.path);
-          }
-        }
-
-        return next;
-      });
-    },
-    [results]
-  );
-
   const handleClean = async () => {
     if (selectedPaths.size === 0) return;
 
     const paths = Array.from(selectedPaths);
     try {
       await cleanItems(paths, false);
-      setSelectedPaths(new Set());
-      await scan({ speed, min_file_size_mb: minFileSizeMb, find_duplicates: findDuplicates });
     } catch (e) {
       console.error("Clean failed:", e);
     }
@@ -276,9 +252,9 @@ function App() {
                 </div>
               </div>
 
-              {results && !isWorking && (
+              {scanResults && !isWorking && (
                 <button
-                  onClick={clearResults}
+                  onClick={clearScanResults}
                   className="ml-auto text-sm text-muted hover:text-secondary transition-colors"
                 >
                   {t("clearResults")}
@@ -308,7 +284,7 @@ function App() {
                   <div>
                     <p className="font-semibold risk-safe">{t("cleanComplete")}</p>
                     <p className="text-sm text-secondary">
-                      {t("itemsCleaned", { count: cleanResult.cleaned_count, size: formatSize(cleanResult.cleaned_size) })}
+                      {t("itemsCleaned", { count: cleanResult.cleaned_count, size: cleanResult.cleaned_size })}
                     </p>
                     {cleanResult.failed_count > 0 && (
                       <p className="text-sm risk-risky">
@@ -318,7 +294,7 @@ function App() {
                   </div>
                 </div>
                 <button
-                  onClick={clearResult}
+                  onClick={clearCleanResult}
                   className="text-muted hover:text-secondary p-1"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -345,14 +321,9 @@ function App() {
 
           {/* Scan results or empty state */}
           <div className="flex-1 overflow-hidden">
-            {results ? (
+            {scanResults ? (
               <ScanView
-                results={results}
-                selectedPaths={selectedPaths}
-                onToggleItem={handleToggleItem}
-                onToggleCategory={handleToggleCategory}
                 onClean={handleClean}
-                isCleaning={isCleaning}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full">

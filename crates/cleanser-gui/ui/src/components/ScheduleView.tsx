@@ -1,56 +1,43 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useAppStore } from "../store/appStore";
 import { useI18n } from "../i18n";
-import type { ScheduledJob, CreateJobInput } from "../types";
+import type { CreateJobInput } from "../types";
 
 export function ScheduleView() {
   const { t } = useI18n();
-  const [jobs, setJobs] = useState<ScheduledJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const loadJobs = async () => {
-    try {
-      setLoading(true);
-      const scheduledJobs = await invoke<ScheduledJob[]>("get_scheduled_jobs");
-      setJobs(scheduledJobs);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    scheduledJobs,
+    isLoadingJobs,
+    jobsError,
+    loadJobs,
+    toggleJob,
+    removeJob,
+  } = useAppStore();
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [loadJobs]);
 
-  const handleToggle = async (job: ScheduledJob) => {
+  const handleToggle = async (job: typeof scheduledJobs[0]) => {
     try {
-      if (job.enabled) {
-        await invoke("disable_scheduled_job", { jobName: job.name });
-      } else {
-        await invoke("enable_scheduled_job", { jobName: job.name });
-      }
-      await loadJobs();
+      await toggleJob(job);
     } catch (e) {
-      setError(String(e));
+      console.error("Failed to toggle job:", e);
     }
   };
 
   const handleRemove = async (jobName: string) => {
     if (!confirm(`Remove scheduled job "${jobName}"?`)) return;
     try {
-      await invoke("remove_scheduled_job", { jobName });
-      await loadJobs();
+      await removeJob(jobName);
     } catch (e) {
-      setError(String(e));
+      console.error("Failed to remove job:", e);
     }
   };
 
-  if (loading) {
+  if (isLoadingJobs) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted">{t("loading")}</div>
@@ -71,7 +58,7 @@ export function ScheduleView() {
               {t("scheduleTab")}
             </h2>
             <p className="text-sm text-muted mt-1">
-              {jobs.length} {jobs.length === 1 ? "job" : "jobs"}
+              {scheduledJobs.length} {scheduledJobs.length === 1 ? "job" : "jobs"}
             </p>
           </div>
           <button
@@ -84,14 +71,14 @@ export function ScheduleView() {
       </div>
 
       {/* Error */}
-      {error && (
+      {jobsError && (
         <div className="card p-4 mb-4 category-card-risky bg-risky/5">
-          <p className="risk-risky">{error}</p>
+          <p className="risk-risky">{jobsError}</p>
         </div>
       )}
 
       {/* Content */}
-      {jobs.length === 0 ? (
+      {scheduledJobs.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <svg className="w-16 h-16 text-muted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -101,7 +88,7 @@ export function ScheduleView() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto space-y-2">
-          {jobs.map((job) => (
+          {scheduledJobs.map((job) => (
             <div key={job.id} className="card p-4">
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -170,6 +157,7 @@ export function ScheduleView() {
 
 function CreateJobModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { t } = useI18n();
+  const { createJob } = useAppStore();
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState("daily");
   const [riskLevel, setRiskLevel] = useState("safe");
@@ -195,7 +183,7 @@ function CreateJobModal({ onClose, onCreated }: { onClose: () => void; onCreated
         secure_delete: secureDelete,
         notify,
       };
-      await invoke("create_scheduled_job", { job });
+      await createJob(job);
       onCreated();
     } catch (e) {
       setError(String(e));

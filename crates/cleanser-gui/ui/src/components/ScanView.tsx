@@ -1,34 +1,36 @@
 import { useState, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import type { ScanResults, CleanableItem, CategoryGroup } from "../types";
+import { useAppStore } from "../store/appStore";
+import type { CleanableItem, CategoryGroup } from "../types";
 import { CategoryCard } from "./CategoryCard";
 import { formatSize } from "../utils";
 import { useI18n } from "../i18n";
 
 interface Props {
-  results: ScanResults;
-  selectedPaths: Set<string>;
-  onToggleItem: (path: string) => void;
-  onToggleCategory: (category: string, selected: boolean) => void;
   onClean: () => void;
-  isCleaning: boolean;
 }
 
-export function ScanView({
-  results,
-  selectedPaths,
-  onToggleItem,
-  onToggleCategory,
-  onClean,
-  isCleaning,
-}: Props) {
+export function ScanView({ onClean }: Props) {
   const { t } = useI18n();
   const [sortBy, setSortBy] = useState<"size" | "count">("size");
 
+  // Get state from Zustand store
+  const {
+    scanResults,
+    selectedPaths,
+    isCleaning,
+    toggleItem,
+    toggleCategory,
+    selectAll,
+    deselectAll,
+    addToWhitelist,
+  } = useAppStore();
+
   // Group items by category
   const categoryGroups = useMemo(() => {
+    if (!scanResults) return [];
+
     const groups = new Map<string, CleanableItem[]>();
-    for (const item of results.items) {
+    for (const item of scanResults.items) {
       const existing = groups.get(item.category) || [];
       existing.push(item);
       groups.set(item.category, existing);
@@ -51,39 +53,38 @@ export function ScanView({
     }
 
     return categoryList;
-  }, [results.items, sortBy]);
+  }, [scanResults, sortBy]);
 
   // Calculate selected size
   const selectedSize = useMemo(() => {
-    return results.items
+    if (!scanResults) return 0;
+    return scanResults.items
       .filter((item) => selectedPaths.has(item.path))
       .reduce((sum, item) => sum + item.size, 0);
-  }, [results.items, selectedPaths]);
+  }, [scanResults, selectedPaths]);
 
   const handleAddToWhitelist = async (path: string) => {
     try {
-      await invoke("add_to_whitelist", { path });
+      await addToWhitelist(path);
     } catch (e) {
       console.error("Failed to add to whitelist:", e);
     }
   };
 
   const handleSelectAll = () => {
-    const allPaths = results.items.map((item) => item.path);
+    if (!scanResults) return;
+
+    const allPaths = scanResults.items.map((item) => item.path);
     const allSelected = allPaths.every((path) => selectedPaths.has(path));
 
     if (allSelected) {
-      for (const path of allPaths) {
-        onToggleItem(path);
-      }
+      deselectAll();
     } else {
-      for (const path of allPaths) {
-        if (!selectedPaths.has(path)) {
-          onToggleItem(path);
-        }
-      }
+      selectAll();
     }
   };
+
+  if (!scanResults) return null;
 
   return (
     <div className="flex flex-col h-full">
@@ -91,10 +92,10 @@ export function ScanView({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-primary">
-            {t("found")} <span className="accent-text">{formatSize(results.total_size)}</span>
+            {t("found")} <span className="accent-text">{formatSize(scanResults.total_size)}</span>
           </h2>
           <p className="text-sm text-secondary">
-            {results.items_count} {results.items_count === 1 ? t("item") : t("items")} {t("inCategories", { count: categoryGroups.length })}
+            {scanResults.items_count} {scanResults.items_count === 1 ? t("item") : t("items")} {t("inCategories", { count: categoryGroups.length })}
           </p>
         </div>
 
@@ -112,7 +113,7 @@ export function ScanView({
             onClick={handleSelectAll}
             className="btn btn-secondary text-sm"
           >
-            {selectedPaths.size === results.items_count
+            {selectedPaths.size === scanResults.items_count
               ? t("deselectAll")
               : t("selectAll")}
           </button>
@@ -127,8 +128,8 @@ export function ScanView({
             category={group.category}
             items={group.items}
             selectedPaths={selectedPaths}
-            onToggleItem={onToggleItem}
-            onToggleCategory={onToggleCategory}
+            onToggleItem={toggleItem}
+            onToggleCategory={toggleCategory}
             onAddToWhitelist={handleAddToWhitelist}
           />
         ))}

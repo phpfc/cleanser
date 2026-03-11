@@ -1,66 +1,51 @@
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
+import { useAppStore } from "../store/appStore";
 import { useI18n } from "../i18n";
 import { formatSize } from "../utils";
-import type { TrashEntry, TrashStats } from "../types";
 
 export function TrashView() {
   const { t } = useI18n();
-  const [items, setItems] = useState<TrashEntry[]>([]);
-  const [stats, setStats] = useState<TrashStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadTrash = async () => {
-    try {
-      setLoading(true);
-      const [trashItems, trashStats] = await Promise.all([
-        invoke<TrashEntry[]>("get_trash_items"),
-        invoke<TrashStats>("get_trash_stats"),
-      ]);
-      setItems(trashItems);
-      setStats(trashStats);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    trashItems,
+    trashStats,
+    isLoadingTrash,
+    trashError,
+    loadTrash,
+    restoreTrashItem,
+    deleteTrashItem,
+    emptyTrash,
+  } = useAppStore();
 
   useEffect(() => {
     loadTrash();
-  }, []);
+  }, [loadTrash]);
 
   const handleRestore = async (id: string) => {
     try {
-      await invoke("restore_trash_item", { entryId: id, toPath: null });
-      await loadTrash();
+      await restoreTrashItem(id);
     } catch (e) {
-      setError(String(e));
+      console.error("Failed to restore item:", e);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await invoke("delete_trash_item", { entryId: id });
-      await loadTrash();
+      await deleteTrashItem(id);
     } catch (e) {
-      setError(String(e));
+      console.error("Failed to delete item:", e);
     }
   };
 
   const handleEmptyTrash = async () => {
-    if (!confirm(t("emptyTrashConfirm", { count: items.length }))) return;
+    if (!confirm(t("emptyTrashConfirm", { count: trashItems.length }))) return;
     try {
-      await invoke("empty_trash");
-      await loadTrash();
+      await emptyTrash();
     } catch (e) {
-      setError(String(e));
+      console.error("Failed to empty trash:", e);
     }
   };
 
-  if (loading) {
+  if (isLoadingTrash) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted">{t("loading")}</div>
@@ -80,13 +65,13 @@ export function TrashView() {
               </svg>
               {t("trashTab")}
             </h2>
-            {stats && (
+            {trashStats && (
               <p className="text-sm text-muted mt-1">
-                {t("trashItems", { count: stats.item_count })} • {t("trashSize", { size: formatSize(stats.total_size) })}
+                {t("trashItems", { count: trashStats.item_count })} • {t("trashSize", { size: formatSize(trashStats.total_size) })}
               </p>
             )}
           </div>
-          {items.length > 0 && (
+          {trashItems.length > 0 && (
             <button
               onClick={handleEmptyTrash}
               className="btn bg-[var(--risk-risky)] text-white hover:opacity-90"
@@ -98,14 +83,14 @@ export function TrashView() {
       </div>
 
       {/* Error */}
-      {error && (
+      {trashError && (
         <div className="card p-4 mb-4 category-card-risky bg-risky/5">
-          <p className="risk-risky">{error}</p>
+          <p className="risk-risky">{trashError}</p>
         </div>
       )}
 
       {/* Content */}
-      {items.length === 0 ? (
+      {trashItems.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <svg className="w-16 h-16 text-muted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -115,7 +100,7 @@ export function TrashView() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto space-y-2">
-          {items.map((item) => (
+          {trashItems.map((item) => (
             <div key={item.id} className="card p-4 flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center">
                 {item.is_directory ? (

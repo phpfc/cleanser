@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { CleanableItem } from "../types";
 import { formatSize, truncatePath, getRiskTextClass, getRiskBadgeClass, getCategoryCardClass } from "../utils";
 import { useI18n } from "../i18n";
+import { WhitelistDirectoryModal } from "./WhitelistDirectoryModal";
 
 interface Props {
   category: string;
@@ -23,6 +24,8 @@ export function CategoryCard({
 }: Props) {
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showWhitelistModal, setShowWhitelistModal] = useState(false);
+  const [selectedPathForWhitelist, setSelectedPathForWhitelist] = useState<string | null>(null);
 
   const totalSize = items.reduce((sum, item) => sum + item.size, 0);
   const selectedCount = items.filter((item) =>
@@ -76,7 +79,7 @@ export function CategoryCard({
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
             <span className={`font-semibold text-lg ${getRiskTextClass(riskLevel)}`}>
-              {category}
+              {t(category as any) || category}
             </span>
             <span className={`text-xs px-2 py-0.5 rounded-full ${getRiskBadgeClass(riskLevel)}`}>
               {getRiskLabel(riskLevel)}
@@ -172,7 +175,8 @@ export function CategoryCard({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onAddToWhitelist(item.path);
+                    setSelectedPathForWhitelist(item.path);
+                    setShowWhitelistModal(true);
                   }}
                   className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg transition-all"
                   title={t("addToWhitelist")}
@@ -195,6 +199,22 @@ export function CategoryCard({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Whitelist Directory Modal */}
+      {showWhitelistModal && selectedPathForWhitelist && (
+        <WhitelistDirectoryModal
+          path={selectedPathForWhitelist}
+          onClose={() => {
+            setShowWhitelistModal(false);
+            setSelectedPathForWhitelist(null);
+          }}
+          onConfirm={(selectedPath) => {
+            onAddToWhitelist(selectedPath);
+            setShowWhitelistModal(false);
+            setSelectedPathForWhitelist(null);
+          }}
+        />
       )}
     </div>
   );

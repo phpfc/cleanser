@@ -58,7 +58,7 @@ export function ScheduleView() {
               {t("scheduleTab")}
             </h2>
             <p className="text-sm text-muted mt-1">
-              {scheduledJobs.length} {scheduledJobs.length === 1 ? "job" : "jobs"}
+              {scheduledJobs.length} {scheduledJobs.length === 1 ? t("job") : t("jobs")}
             </p>
           </div>
           <button
@@ -111,9 +111,9 @@ export function ScheduleView() {
                   </div>
                   <p className="text-sm text-muted">{job.frequency}</p>
                   <div className="flex gap-3 mt-1 text-xs text-muted">
-                    <span>Risk: {job.risk_level}</span>
-                    {job.use_trash && <span>Trash</span>}
-                    {job.secure_delete && <span>Secure</span>}
+                    <span>{t("risk")}: {job.risk_level}</span>
+                    {job.use_trash && <span>{t("trash")}</span>}
+                    {job.secure_delete && <span>{t("secure")}</span>}
                     <span>{t("lastRun")}: {job.last_run || t("never")}</span>
                   </div>
                 </div>
@@ -169,7 +169,7 @@ function CreateJobModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      setError("Name is required");
+      setError(t("nameRequired"));
       return;
     }
 
@@ -274,7 +274,7 @@ function CreateJobModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} className="btn btn-secondary">
-            Cancel
+            {t("cancel")}
           </button>
           <button
             onClick={handleCreate}

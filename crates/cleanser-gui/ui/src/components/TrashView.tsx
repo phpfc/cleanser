@@ -121,7 +121,7 @@ export function TrashView() {
                   {item.original_path}
                 </p>
                 <p className="text-xs text-muted">
-                  {formatSize(item.size)} • {item.age} ago
+                  {formatSize(item.size)} • {item.age} {t("ago")}
                 </p>
               </div>
               <div className="flex gap-2">

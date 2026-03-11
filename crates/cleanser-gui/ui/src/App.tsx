@@ -8,6 +8,7 @@ import { TrashView } from "./components/TrashView";
 import { ScheduleView } from "./components/ScheduleView";
 import { useVersion } from "./hooks/useVersion";
 import { useI18n } from "./i18n";
+import { formatSize } from "./utils";
 import type { ScanConfig } from "./types";
 
 type ScanSpeed = "quick" | "normal" | "thorough";
@@ -284,7 +285,7 @@ function App() {
                   <div>
                     <p className="font-semibold risk-safe">{t("cleanComplete")}</p>
                     <p className="text-sm text-secondary">
-                      {t("itemsCleaned", { count: cleanResult.cleaned_count, size: cleanResult.cleaned_size })}
+                      {t("itemsCleaned", { count: cleanResult.cleaned_count, size: formatSize(cleanResult.cleaned_size) })}
                     </p>
                     {cleanResult.failed_count > 0 && (
                       <p className="text-sm risk-risky">

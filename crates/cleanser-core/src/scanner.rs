@@ -16,6 +16,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use tracing::warn;
 use walkdir::WalkDir;
 
@@ -74,15 +76,8 @@ pub fn scan_with_progress(
         }
     }
 
-    progress.on_scan_progress(ScanProgress {
-        phase: ScanPhase::Scanning,
-        message: "Scanning with filesystem map...".into(),
-        current: None,
-        total: None,
-    });
-
-    // Use the map to guide scanning
-    let mut items = scan_using_map(&config, &fs_map)?;
+    // Use the map to guide scanning (progress will be reported inside)
+    let mut items = scan_using_map(&config, &fs_map, progress)?;
 
     // Separate pass for duplicates (requires hashing)
     if config.find_duplicates {
@@ -92,7 +87,7 @@ pub fn scan_with_progress(
             current: None,
             total: None,
         });
-        let duplicate_items = find_duplicates(&config.paths, config.max_depth.unwrap_or(6))?;
+        let duplicate_items = find_duplicates(&config.paths, config.max_depth.unwrap_or(6), progress)?;
         items.extend(duplicate_items);
     }
 
@@ -123,7 +118,11 @@ pub fn scan_with_progress(
 }
 
 /// Scan using the filesystem map for guidance
-fn scan_using_map(config: &ScanConfig, fs_map: &FileSystemMap) -> Result<Vec<CleanableItem>> {
+fn scan_using_map(
+    config: &ScanConfig,
+    fs_map: &FileSystemMap,
+    progress: &dyn ProgressCallback,
+) -> Result<Vec<CleanableItem>> {
     let min_large_file_size = config.min_file_size_mb * 1024 * 1024;
     let log_regex = Regex::new(r"\.log$").expect("Invalid regex pattern for log files");
 
@@ -131,9 +130,41 @@ fn scan_using_map(config: &ScanConfig, fs_map: &FileSystemMap) -> Result<Vec<Cle
 
     // First, scan directories identified in the map
     let dirs_vec: Vec<&MappedDirectory> = fs_map.directories.values().collect();
+    let total_dirs = dirs_vec.len() as u64;
+
+    // Report initial scanning state
+    progress.on_scan_progress(ScanProgress {
+        phase: ScanPhase::Scanning,
+        message: format!("Scanning {} directories...", total_dirs),
+        current: Some(0),
+        total: Some(total_dirs),
+    });
+
+    // Use atomic counter for thread-safe progress tracking
+    let processed_count = AtomicU64::new(0);
+    let last_reported = Mutex::new(0u64);
+
     let mapped_items: Vec<CleanableItem> = dirs_vec
         .par_iter()
         .filter_map(|&mapped_dir| {
+            // Increment counter atomically
+            let current = processed_count.fetch_add(1, Ordering::SeqCst) + 1;
+
+            // Report progress every 10 directories, with mutex to prevent out-of-order reporting
+            if current % 10 == 0 || current == 1 || current == total_dirs {
+                if let Ok(mut last) = last_reported.lock() {
+                    if current > *last {
+                        *last = current;
+                        progress.on_scan_progress(ScanProgress {
+                            phase: ScanPhase::Scanning,
+                            message: format!("Scanning mapped directories... {}/{}", current, total_dirs),
+                            current: Some(current),
+                            total: Some(total_dirs),
+                        });
+                    }
+                }
+            }
+
             // Skip if in ignore list
             if config.ignore_patterns.should_ignore(&mapped_dir.path) {
                 return None;
@@ -150,6 +181,14 @@ fn scan_using_map(config: &ScanConfig, fs_map: &FileSystemMap) -> Result<Vec<Cle
         .collect();
 
     items.extend(mapped_items);
+
+    // Report completion of mapped directories scan
+    progress.on_scan_progress(ScanProgress {
+        phase: ScanPhase::Scanning,
+        message: format!("Scanned {} directories", total_dirs),
+        current: Some(total_dirs),
+        total: Some(total_dirs),
+    });
 
     // Then, scan configured paths for items not in the map (large files, logs)
     let max_depth = config.max_depth.unwrap_or(match config.speed {
@@ -325,9 +364,20 @@ fn check_log_file(path: &Path, log_regex: &Regex) -> Option<CleanableItem> {
 /// Find duplicate files using a two-phase approach:
 /// 1. Group by size + partial hash (first and last 4KB) for quick pre-filtering
 /// 2. Full SHA256 hash only for files that match in phase 1
-fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableItem>> {
+fn find_duplicates(
+    paths: &[PathBuf],
+    max_depth: usize,
+    progress: &dyn ProgressCallback,
+) -> Result<Vec<CleanableItem>> {
     // Phase 1: Group files by size
     let mut size_groups: HashMap<u64, Vec<PathBuf>> = HashMap::new();
+
+    progress.on_scan_progress(ScanProgress {
+        phase: ScanPhase::FindingDuplicates,
+        message: "Scanning files by size...".into(),
+        current: None,
+        total: None,
+    });
 
     for base_path in paths {
         for entry in WalkDir::new(base_path)
@@ -352,34 +402,92 @@ fn find_duplicates(paths: &[PathBuf], max_depth: usize) -> Result<Vec<CleanableI
     }
 
     // Phase 2: For groups with multiple files, compute partial hash
-    let mut partial_hash_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    let potential_duplicates: Vec<_> = size_groups
+        .into_iter()
+        .filter(|(_, paths)| paths.len() >= 2)
+        .collect();
+    let total_files: usize = potential_duplicates.iter().map(|(_, paths)| paths.len()).sum();
 
-    for (size, file_paths) in size_groups {
-        if file_paths.len() < 2 {
-            continue; // No duplicates possible
-        }
+    progress.on_scan_progress(ScanProgress {
+        phase: ScanPhase::FindingDuplicates,
+        message: format!("Computing partial hashes for {} files...", total_files),
+        current: Some(0),
+        total: Some(total_files as u64),
+    });
 
+    let processed = AtomicU64::new(0);
+    let partial_hash_groups_sync = Mutex::new(HashMap::new());
+    let last_reported = Mutex::new(0u64);
+
+    potential_duplicates.par_iter().for_each(|(size, file_paths)| {
         for path in file_paths {
-            if let Ok(partial) = compute_partial_hash(&path, size) {
-                partial_hash_groups.entry(partial).or_default().push(path);
+            if let Ok(partial) = compute_partial_hash(path, *size) {
+                if let Ok(mut groups) = partial_hash_groups_sync.lock() {
+                    groups.entry(partial).or_insert_with(Vec::new).push(path.clone());
+                }
+            }
+            let current = processed.fetch_add(1, Ordering::SeqCst) + 1;
+            if current % 10 == 0 || current == total_files as u64 {
+                if let Ok(mut last) = last_reported.lock() {
+                    if current > *last {
+                        *last = current;
+                        progress.on_scan_progress(ScanProgress {
+                            phase: ScanPhase::FindingDuplicates,
+                            message: format!("Computing partial hashes... {}/{}", current, total_files),
+                            current: Some(current),
+                            total: Some(total_files as u64),
+                        });
+                    }
+                }
             }
         }
-    }
+    });
+
+    let partial_hash_groups = partial_hash_groups_sync.into_inner().unwrap();
 
     // Phase 3: For files with matching partial hash, compute full hash
-    let mut full_hash_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    let candidates: Vec<_> = partial_hash_groups
+        .into_iter()
+        .filter(|(_, paths)| paths.len() >= 2)
+        .collect();
+    let total_candidates: usize = candidates.iter().map(|(_, paths)| paths.len()).sum();
 
-    for (_, file_paths) in partial_hash_groups {
-        if file_paths.len() < 2 {
-            continue; // No duplicates possible
-        }
+    progress.on_scan_progress(ScanProgress {
+        phase: ScanPhase::FindingDuplicates,
+        message: format!("Computing full hashes for {} candidates...", total_candidates),
+        current: Some(0),
+        total: Some(total_candidates as u64),
+    });
 
+    let processed = AtomicU64::new(0);
+    let full_hash_groups_sync = Mutex::new(HashMap::new());
+    let last_reported = Mutex::new(0u64);
+
+    candidates.par_iter().for_each(|(_, file_paths)| {
         for path in file_paths {
-            if let Ok(hash) = hash_file_full(&path) {
-                full_hash_groups.entry(hash).or_default().push(path);
+            if let Ok(hash) = hash_file_full(path) {
+                if let Ok(mut groups) = full_hash_groups_sync.lock() {
+                    groups.entry(hash).or_insert_with(Vec::new).push(path.clone());
+                }
+            }
+            let current = processed.fetch_add(1, Ordering::SeqCst) + 1;
+            if current % 5 == 0 || current == total_candidates as u64 {
+                if let Ok(mut last) = last_reported.lock() {
+                    if current > *last {
+                        *last = current;
+                        progress.on_scan_progress(ScanProgress {
+                            phase: ScanPhase::FindingDuplicates,
+                            message: format!("Computing full hashes... {}/{}", current, total_candidates),
+                            current: Some(current),
+                            total: Some(total_candidates as u64),
+                        });
+                    }
+                }
             }
         }
-    }
+    });
+
+    let full_hash_groups = full_hash_groups_sync.into_inner().unwrap();
 
     // Build duplicate items
     let mut duplicates = Vec::new();

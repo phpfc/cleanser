@@ -89,6 +89,34 @@ export const translations = {
     // Loading
     loading: "Loading...",
 
+    // Scan Phases
+    scanPhaseLoadingMap: "Loading filesystem map",
+    scanPhaseUpdatingMap: "Updating filesystem map",
+    scanPhaseScanning: "Scanning directories",
+    scanPhaseFindingDuplicates: "Finding duplicates",
+    scanPhaseComplete: "Scan complete",
+
+    // Scan Messages
+    scanMsgStarting: "Starting filesystem scan...",
+    scanMsgNoMapFound: "No filesystem map found. Creating initial map...",
+    scanMsgUpdatingMap: "Updating filesystem map...",
+    scanMsgScanningDirs: "Scanning {count} directories...",
+    scanMsgScannedDirs: "Scanned {count} directories",
+    scanMsgScanningMappedDirs: "Scanning mapped directories... {current}/{total}",
+    scanMsgFindingDuplicates: "Finding duplicate files...",
+    scanMsgScanningBySize: "Scanning files by size...",
+    scanMsgComputingPartialHashes: "Computing partial hashes for {count} files...",
+    scanMsgComputingPartialProgress: "Computing partial hashes... {current}/{total}",
+    scanMsgComputingFullHashes: "Computing full hashes for {count} candidates...",
+    scanMsgComputingFullProgress: "Computing full hashes... {current}/{total}",
+    scanMsgComplete: "Scan complete!",
+
+    // Clean Phases
+    cleanPhaseLoading: "Loading scan results",
+    cleanPhaseScanning: "Scanning system",
+    cleanPhaseCleaning: "Cleaning items",
+    cleanPhaseComplete: "Clean complete",
+
     // Version
     updateAvailable: "Update available",
     currentVersion: "Current: v{version}",
@@ -256,6 +284,34 @@ export const translations = {
 
     // Loading
     loading: "Carregando...",
+
+    // Scan Phases
+    scanPhaseLoadingMap: "Carregando mapa do sistema",
+    scanPhaseUpdatingMap: "Atualizando mapa do sistema",
+    scanPhaseScanning: "Escaneando diretórios",
+    scanPhaseFindingDuplicates: "Procurando duplicados",
+    scanPhaseComplete: "Scan concluído",
+
+    // Scan Messages
+    scanMsgStarting: "Iniciando scan do sistema...",
+    scanMsgNoMapFound: "Nenhum mapa encontrado. Criando mapa inicial...",
+    scanMsgUpdatingMap: "Atualizando mapa do sistema...",
+    scanMsgScanningDirs: "Escaneando {count} diretórios...",
+    scanMsgScannedDirs: "Escaneados {count} diretórios",
+    scanMsgScanningMappedDirs: "Escaneando diretórios mapeados... {current}/{total}",
+    scanMsgFindingDuplicates: "Procurando arquivos duplicados...",
+    scanMsgScanningBySize: "Escaneando arquivos por tamanho...",
+    scanMsgComputingPartialHashes: "Computando hashes parciais para {count} arquivos...",
+    scanMsgComputingPartialProgress: "Computando hashes parciais... {current}/{total}",
+    scanMsgComputingFullHashes: "Computando hashes completos para {count} candidatos...",
+    scanMsgComputingFullProgress: "Computando hashes completos... {current}/{total}",
+    scanMsgComplete: "Scan concluído!",
+
+    // Clean Phases
+    cleanPhaseLoading: "Carregando resultados do scan",
+    cleanPhaseScanning: "Escaneando sistema",
+    cleanPhaseCleaning: "Limpando itens",
+    cleanPhaseComplete: "Limpeza concluída",
 
     // Version
     updateAvailable: "Atualização disponível",

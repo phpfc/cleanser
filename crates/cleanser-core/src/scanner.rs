@@ -87,7 +87,8 @@ pub fn scan_with_progress(
             current: None,
             total: None,
         });
-        let duplicate_items = find_duplicates(&config.paths, config.max_depth.unwrap_or(6), progress)?;
+        let duplicate_items =
+            find_duplicates(&config.paths, config.max_depth.unwrap_or(6), progress)?;
         items.extend(duplicate_items);
     }
 
@@ -151,13 +152,16 @@ fn scan_using_map(
             let current = processed_count.fetch_add(1, Ordering::SeqCst) + 1;
 
             // Report progress every 10 directories, with mutex to prevent out-of-order reporting
-            if current % 10 == 0 || current == 1 || current == total_dirs {
+            if current.is_multiple_of(10) || current == 1 || current == total_dirs {
                 if let Ok(mut last) = last_reported.lock() {
                     if current > *last {
                         *last = current;
                         progress.on_scan_progress(ScanProgress {
                             phase: ScanPhase::Scanning,
-                            message: format!("Scanning mapped directories... {}/{}", current, total_dirs),
+                            message: format!(
+                                "Scanning mapped directories... {}/{}",
+                                current, total_dirs
+                            ),
                             current: Some(current),
                             total: Some(total_dirs),
                         });
@@ -406,7 +410,10 @@ fn find_duplicates(
         .into_iter()
         .filter(|(_, paths)| paths.len() >= 2)
         .collect();
-    let total_files: usize = potential_duplicates.iter().map(|(_, paths)| paths.len()).sum();
+    let total_files: usize = potential_duplicates
+        .iter()
+        .map(|(_, paths)| paths.len())
+        .sum();
 
     progress.on_scan_progress(ScanProgress {
         phase: ScanPhase::FindingDuplicates,
@@ -419,29 +426,37 @@ fn find_duplicates(
     let partial_hash_groups_sync = Mutex::new(HashMap::new());
     let last_reported = Mutex::new(0u64);
 
-    potential_duplicates.par_iter().for_each(|(size, file_paths)| {
-        for path in file_paths {
-            if let Ok(partial) = compute_partial_hash(path, *size) {
-                if let Ok(mut groups) = partial_hash_groups_sync.lock() {
-                    groups.entry(partial).or_insert_with(Vec::new).push(path.clone());
+    potential_duplicates
+        .par_iter()
+        .for_each(|(size, file_paths)| {
+            for path in file_paths {
+                if let Ok(partial) = compute_partial_hash(path, *size) {
+                    if let Ok(mut groups) = partial_hash_groups_sync.lock() {
+                        groups
+                            .entry(partial)
+                            .or_insert_with(Vec::new)
+                            .push(path.clone());
+                    }
                 }
-            }
-            let current = processed.fetch_add(1, Ordering::SeqCst) + 1;
-            if current % 10 == 0 || current == total_files as u64 {
-                if let Ok(mut last) = last_reported.lock() {
-                    if current > *last {
-                        *last = current;
-                        progress.on_scan_progress(ScanProgress {
-                            phase: ScanPhase::FindingDuplicates,
-                            message: format!("Computing partial hashes... {}/{}", current, total_files),
-                            current: Some(current),
-                            total: Some(total_files as u64),
-                        });
+                let current = processed.fetch_add(1, Ordering::SeqCst) + 1;
+                if current.is_multiple_of(10) || current == total_files as u64 {
+                    if let Ok(mut last) = last_reported.lock() {
+                        if current > *last {
+                            *last = current;
+                            progress.on_scan_progress(ScanProgress {
+                                phase: ScanPhase::FindingDuplicates,
+                                message: format!(
+                                    "Computing partial hashes... {}/{}",
+                                    current, total_files
+                                ),
+                                current: Some(current),
+                                total: Some(total_files as u64),
+                            });
+                        }
                     }
                 }
             }
-        }
-    });
+        });
 
     let partial_hash_groups = partial_hash_groups_sync.into_inner().unwrap();
 
@@ -454,7 +469,10 @@ fn find_duplicates(
 
     progress.on_scan_progress(ScanProgress {
         phase: ScanPhase::FindingDuplicates,
-        message: format!("Computing full hashes for {} candidates...", total_candidates),
+        message: format!(
+            "Computing full hashes for {} candidates...",
+            total_candidates
+        ),
         current: Some(0),
         total: Some(total_candidates as u64),
     });
@@ -467,17 +485,23 @@ fn find_duplicates(
         for path in file_paths {
             if let Ok(hash) = hash_file_full(path) {
                 if let Ok(mut groups) = full_hash_groups_sync.lock() {
-                    groups.entry(hash).or_insert_with(Vec::new).push(path.clone());
+                    groups
+                        .entry(hash)
+                        .or_insert_with(Vec::new)
+                        .push(path.clone());
                 }
             }
             let current = processed.fetch_add(1, Ordering::SeqCst) + 1;
-            if current % 5 == 0 || current == total_candidates as u64 {
+            if current.is_multiple_of(5) || current == total_candidates as u64 {
                 if let Ok(mut last) = last_reported.lock() {
                     if current > *last {
                         *last = current;
                         progress.on_scan_progress(ScanProgress {
                             phase: ScanPhase::FindingDuplicates,
-                            message: format!("Computing full hashes... {}/{}", current, total_candidates),
+                            message: format!(
+                                "Computing full hashes... {}/{}",
+                                current, total_candidates
+                            ),
                             current: Some(current),
                             total: Some(total_candidates as u64),
                         });

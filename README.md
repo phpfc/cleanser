@@ -150,6 +150,21 @@ cd crates/cleanser-gui/ui && npm install && cd ..
 cargo tauri build
 ```
 
+## Development
+
+**Setup git hooks:**
+```bash
+# Install pre-push hooks to run linting and tests automatically
+./scripts/install-git-hooks.sh
+```
+
+The pre-push hook will automatically run:
+- `cargo fmt --all -- --check` (formatting)
+- `cargo clippy --workspace --exclude cleanser-gui --all-targets -- -D warnings` (linting)
+- `cargo test --workspace --exclude cleanser-gui --verbose` (tests)
+
+To skip the hook (not recommended): `git push --no-verify`
+
 ## Safety
 
 - Always preview with `--dry-run` first

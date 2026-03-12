@@ -223,7 +223,7 @@ impl TrashManager {
 
         // Fall back to copy + delete (works across filesystems)
         if source.is_dir() {
-            self.copy_dir_recursive(source, dest)?;
+            Self::copy_dir_recursive(source, dest)?;
             fs::remove_dir_all(source)?;
         } else {
             fs::copy(source, dest)?;
@@ -234,7 +234,7 @@ impl TrashManager {
     }
 
     /// Recursively copy a directory
-    fn copy_dir_recursive(&self, src: &Path, dst: &Path) -> Result<()> {
+    fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
         fs::create_dir_all(dst)?;
 
         for entry in fs::read_dir(src)? {
@@ -243,7 +243,7 @@ impl TrashManager {
             let dst_path = dst.join(entry.file_name());
 
             if src_path.is_dir() {
-                self.copy_dir_recursive(&src_path, &dst_path)?;
+                Self::copy_dir_recursive(&src_path, &dst_path)?;
             } else {
                 fs::copy(&src_path, &dst_path)?;
             }
